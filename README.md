@@ -2,7 +2,7 @@
 
 "Partitioning environment and space in species-by-site matrices: a comparison of methods for community ecology and macroecology"
 
-Duarte S. Viana, Petr Keil, Alienor Jeliazkov
+Authors: Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 
 
 The files contained in this repository provide the R code for simulating and analysing the data corresponding to the mentioned paper. Below we provide a brief description of each file.
