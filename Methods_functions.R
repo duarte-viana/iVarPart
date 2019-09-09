@@ -1,5 +1,5 @@
 ###########################################
-# Supporting Information, Appendix S3
+# Supporting Information
 # "Partitioning environment and space in species-by-site matrices: a comparison of methods for community ecology and macroecology"
 # Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 ###########################################
@@ -525,6 +525,5 @@ R2.BRT <- function(Y, X)
               Y.pred = preds)
   return(fit)
 }
-
 
 
