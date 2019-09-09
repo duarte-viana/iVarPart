@@ -1,5 +1,5 @@
 ###########################################
-# Supporting Information, Appendix S3
+# Supporting Information
 # "Partitioning environment and space in species-by-site matrices: a comparison of methods for community ecology and macroecology"
 # Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 ###########################################
@@ -30,22 +30,8 @@ Poisson.deviance <- function(Y, mu)
 
 
 # ------------------------------------------------------------------------------
-# 1. Explained deviance that uses a global mean
-D2.glob.Poisson <- function(Y.obs, Y.pred)
-{
-  Y <- as.matrix(Y.obs)
-  mu <- as.matrix(Y.pred) # we assume that the predicted values are the Poisson mu
-  
-  resid.dev <- Poisson.deviance(Y, mu)
-  null.dev  <- Poisson.deviance(Y, mean(Y))
-  D2 <- 1 - resid.dev/null.dev
-  return(D2)
-}
-
-
-# ------------------------------------------------------------------------------
-# 2. Explained deviance calculated for each species, then averaged
-D2.avg.Poisson <- function(Y.obs, Y.pred)
+# 1. Explained deviance calculated for each species, then averaged
+D2.Poisson <- function(Y.obs, Y.pred)
 {
   Y <- as.matrix(Y.obs)
   mu <- as.matrix(Y.pred) # we assume that the predicted values are the Poisson mu
@@ -67,8 +53,8 @@ D2.avg.Poisson <- function(Y.obs, Y.pred)
 
 
 # ------------------------------------------------------------------------------
-# 3. R2 function for multivariate responses using the "trace" statistic
-R2.glob.multivar <- function(Y.obs, Y.pred)
+# 2. R2 function for multivariate responses using the "trace" statistic
+R2.multivar <- function(Y.obs, Y.pred)
 {
   Y <- as.matrix(Y.obs)
   pred.mat <- as.matrix(Y.pred)
@@ -85,21 +71,8 @@ R2.glob.multivar <- function(Y.obs, Y.pred)
 
 
 # ------------------------------------------------------------------------------
-# 4. R2 function applying the "ordinary" R2 logic
-R2.glob.classic <- function(Y.obs, Y.pred)
-{
-  Y <- as.matrix(Y.obs)
-  pred.mat <- as.matrix(Y.pred)
-  null.sum.sq <- sum((Y - mean(Y))^2)
-  resid.sum.sq <- sum((Y - pred.mat)^2)
-  r2 <- 1 - resid.sum.sq/null.sum.sq
-  return(r2)
-}
-
-
-# ------------------------------------------------------------------------------
-# 5. R2 function averaged over species
-R2.avg.classic <- function(Y.obs, Y.pred)
+# 3. R2 classic function averaged over species
+R2.classic <- function(Y.obs, Y.pred)
 {
   Y <- as.matrix(Y.obs)
   pred.mat <- as.matrix(Y.pred)
@@ -118,8 +91,8 @@ R2.avg.classic <- function(Y.obs, Y.pred)
 
 
 # ------------------------------------------------------------------------------
-# 6. log-R2 function averaged over species
-R2.avg.log <- function(Y.obs, Y.pred)
+# 4. log-R2 function averaged over species
+R2.log <- function(Y.obs, Y.pred)
 {
   Y <- as.matrix(Y.obs)
   pred.mat <- as.matrix(Y.pred)
@@ -143,12 +116,10 @@ R2.avg.log <- function(Y.obs, Y.pred)
 
 R2D2 <- function(Y.obs, Y.pred)
 {
-  res <-  c(R2avr = R2.avg.classic(Y.obs, Y.pred), 
-            R2com = R2.glob.classic(Y.obs, Y.pred), 
-            R2mv  = R2.glob.multivar(Y.obs, Y.pred), 
-            D2avr = D2.avg.Poisson(Y.obs, Y.pred), 
-            D2com = D2.glob.Poisson(Y.obs, Y.pred),
-            R2log = R2.avg.log(Y.obs, Y.pred))
+  res <-  c(R2.classic = R2.classic(Y.obs, Y.pred), 
+            R2.log = R2.log(Y.obs, Y.pred),
+            R2.multivar  = R2.multivar(Y.obs, Y.pred), 
+            R2.McFadden = D2.Poisson(Y.obs, Y.pred))
   res[res < 0] <- 0 # change negative values to 0
   return(res)
 }
@@ -172,9 +143,112 @@ VarPartClap <- function(ab.ini, bc.ini, bc.ini.adj, abc.ini, msr.ab, msr.abc){
 
 
 
+################################################################################
+# Measures for BINARY outcomes and probability predictions
+
+# ------------------------------------------------------------------------------
+# MCFADDEN PSEUDO R2 (gives identical result to explained deviance)
+# ------------------------------------------------------------------------------
+
+R2.McFadden <- function(Y.obs, Y.pred)
+{
+  L.base <- sum(dbinom(x=Y.obs, size = 1, prob = sum(Y.obs/length(Y.obs)), log=TRUE))
+  L.full <- sum(dbinom(x=Y.obs, size = 1, prob = Y.pred, log=TRUE))
+  1 - (L.full/L.base)
+}
+
+# ------------------------------------------------------------------------------
+# EFFRON PSEUDO R2
+#  - This implementation is taken from  the PseudoR2 function from package DescTools
+# ------------------------------------------------------------------------------
+
+R2.Efron <- function(Y.obs, Y.pred)
+{
+  1 - (sum((Y.obs - Y.pred)^2))/(sum((Y.obs - mean(Y.obs))^2))
+}
+
+# ------------------------------------------------------------------------------
+# TJUR PSEUDO R2
+# This implementation is taken from  the PseudoR2 function from package DescTools
+# ------------------------------------------------------------------------------
+
+R2.Tjur <- function(Y.obs, Y.pred)
+{
+  unname(diff(tapply(Y.pred, Y.obs, 
+                     mean, na.rm = TRUE)))
+}
+
+# ------------------------------------------------------------------------------
+# PROPORTION OF EXPLAINED BERNOULLI DEVIANCE (identical results to McFadden pseudo R2)
+# ------------------------------------------------------------------------------
+
+D2.binom <- function(Y.obs, Y.pred) 
+{
+  null.D = -2*sum(dbinom(x=Y.obs, size = 1, prob = sum(Y.obs/length(Y.obs)), log=TRUE))
+  pred.D = -2*sum(dbinom(x=Y.obs, size = 1, prob = Y.pred, log=TRUE))
+  1 - pred.D/null.D
+}
+
+# ------------------------------------------------------------------------------
+# Function that calculates the functions above for all species and averages them
+# across the species
+
+R2D2.binom <- function(Y.obs, Y.pred)
+{
+  Y.obs <- as.matrix(Y.obs)
+  Y.pred <- as.matrix(Y.pred) 
+  
+  res <- list()
+  for(i in 1:ncol(Y.obs))
+  {
+    res[[i]] <- c(R2.McFadden = D2.binom(Y.obs[,i], Y.pred[,i]), 
+                  R2.Efron    = R2.Efron(Y.obs[,i], Y.pred[,i]), 
+                  R2.Tjur     = R2.Tjur(Y.obs[,i], Y.pred[,i]))
+  }
+  res <- do.call(rbind, res)
+  res[res < 0] <- 0 # change negative values to 0
+  res[is.nan(res)] <- 0
+
+  res <- colMeans(res, na.rm = TRUE)
+  return(res)
+}
+
+# Testing:
+# Y.pred <- R2.MVRegTree(Y = mat.sp, X = mat.env, binary = TRUE)
+# Y.obs <- mat.sp
+# Y.obs[Y.obs > 1] <- 1
+# plot(Y.pred, Y.obs); abline(a=0, b=1)
+# R2D2.binom(Y.obs, Y.pred)
 
 
+# ------------------------------------------------------------------------------
 
+# testing of the binomial measures
+# 1. simulated data
+#      x <- sort(rnorm(30))
+#      a <- 0
+#      b <- 5
+#      p <- exp(a + b*x)/(1 + exp(a + b*x))
+#      plot(x, p, type = "l")
+#      y <- rbinom(n=length(x), size= 1, prob = p)
+#      points(x, y)
+#      m1 <- glm(y ~ x, family="binomial")
+#      y.pred <- predict(m1, type = "response")
+#      lines(x, y.pred, col="red")
 
-
+# 2. test the new functions against the implementations in other packages
+#
+#      PseudoR2(m1, which="all")
+#      
+#      summary(m1)
+#      D2.binom(y, y.pred)
+#      
+#      PseudoR2(m1, which="Effron")
+#      R2.Efron(y, y.pred)
+#      
+#      PseudoR2(m1, which="Tjur")
+#      R2.Tjur(y, y.pred)
+#      
+#      PseudoR2(m1, which="McFadden")
+#      R2.McFadden(y, y.pred)
 
