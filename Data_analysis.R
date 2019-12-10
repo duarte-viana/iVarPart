@@ -720,5 +720,3 @@ for(m in 1:length(meths)){
 
 # Output object
 lout <- list(res.env, res.shared, res.spa, res1, res2, res3)
-
-
