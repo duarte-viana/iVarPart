@@ -57,7 +57,6 @@ R2.RDA <- function(Y, X, binary = FALSE){
 # CCA
 # ------------------------------------------------------------------------------
 
-## On raw abundance data
 R2.CCA <- function(Y, X, binary = FALSE){
   require(vegan)
   mod <- cca(Y, do.call("cbind", X), scannf = F) 
@@ -77,7 +76,8 @@ R2.CCA <- function(Y, X, binary = FALSE){
 # dbRDA
 # ------------------------------------------------------------------------------
 
-## On raw abundance data
+# Using Bray-Curtis distance
+
 R2.dbRDA <- function(Y, X, binary = FALSE){
   require(vegan)
   BC <- vegdist(Y, method="bray", binary=binary)
@@ -103,7 +103,6 @@ R2.dbRDA <- function(Y, X, binary = FALSE){
 # MRM
 # ------------------------------------------------------------------------------
 
-## On raw abundance data
 R2.MRM <- function(Y, X, binary = FALSE){
   require(vegan)
   BC <- as.numeric(vegdist(Y, method="bray", binary = binary))
