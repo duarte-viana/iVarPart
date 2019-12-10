@@ -104,11 +104,12 @@ ws <- pars$ws[task.id]
 we <- 1-ws
 
 if(dat=="counts"){
-  mat.spa <- rescale(mat.spa,c(0,20))
-  mat.env0 <- rescale(mat.env0,c(0,20))
+  for(j in 1:ncol(mat.spa)) mat.spa[,j] <- rescale(mat.spa[,j],c(0,20))
+  for(j in 1:ncol(mat.env0)) mat.env0[,j] <- rescale(mat.env0[,j],c(0,20))
   mean.abund <- as.vector(ws*mat.spa + we*mat.env0)
   final.abund <- rpois(length(mean.abund),mean.abund)
   mat.sp <- matrix(final.abund,nrow=nrow(mat.env0),ncol=ncol(mat.env0))
+  mat.sp.true <- matrix(mean.abund,nrow=nrow(mat.env0),ncol=ncol(mat.env0))
 }
 
 if(dat=="binary"){
@@ -116,6 +117,7 @@ if(dat=="binary"){
   pr <- 1/(1+exp(-mean.abund)) # pass through an inv-logit function
   final.pr <- rbinom(length(mean.abund),1,pr)
   mat.sp <- matrix(final.pr,nrow=nrow(mat.env0),ncol=ncol(mat.env0))
+  mat.sp.true <- matrix(pr,nrow=nrow(mat.env0),ncol=ncol(mat.env0))
 }
 
 # PCNM
@@ -123,8 +125,7 @@ xy.pcnm <- dbmem(xyd,MEM.autocor = "positive",silent=TRUE)
 all.pcnm <- as.data.frame(xy.pcnm)
 
 # Store relevant data
-lout <- list(mat.sp=mat.sp,pred.env=mat.env0,pred.spa=mat.spa,mat.env=mat.env,mat.xy=xyd,mat.spa=all.pcnm, 
-             mem.listw=attr(xy.pcnm, "listw"))
+lout <- list(mat.sp=mat.sp, mat.sp.true=mat.sp.true, pred.env=mat.env0, pred.spa=mat.spa, mat.env=mat.env,
+             mat.xy=xyd, mat.spa=all.pcnm, mem.listw=attr(xy.pcnm,"listw"))
 # the "lout" object was stored in a list called "sim", containing all simulations 
  
-
