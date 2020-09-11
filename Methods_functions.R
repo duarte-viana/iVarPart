@@ -1,6 +1,6 @@
 ###########################################
-# Supporting Information
-# "Partitioning environment and space in species-by-site matrices: a comparison of methods for community ecology and macroecology"
+# Supporting Information, Appendix S2
+# "Partitioning environment and space in site-by-species matrices: a comparison of methods for community ecology and macroecology"
 # Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 ###########################################
 
@@ -21,35 +21,69 @@ source("R2D2_functions.R")
 
 # INSTALLATION OF THE PACKAGES
 
-#install.packages(c("vegan", "ecodist", "stats"))
+#install.packages(c("vegan", "stats"))
 
 # ------------------------------------------------------------------------------
-# RDA
+# RDA or univariate linear model
 # ------------------------------------------------------------------------------
 
-# On Hellinger-transformed abundance data
-R2.RDA <- function(Y, X, binary = FALSE){
+# On Hellinger-transformed data
+R2.RDA <- function(Y, X, binary = FALSE, env.eff = "linear"){
   require(vegan)
-  Y.hel <- as.matrix(decostand(as.matrix(Y), "hellinger"))
+  require(Matrix)
   
-  Y.stand <- scale(Y.hel,scale=FALSE)
-  pred <- list()
-  for(i in 1:ncol(Y)){
-    lmi <- lm(Y.stand[,i]~., data=as.data.frame(do.call("cbind", X)))
-    pred[[i]] <- predict(lmi)
+  if(ncol(Y)==1){
+    Y.hel <- Y
+  } else{
+    Y.hel <- as.matrix(decostand(as.matrix(Y), "hellinger"))
   }
-  Y.pred <- as.matrix(do.call("cbind",pred))
   
+  env <- X$env
+  if(!is.null(env) && env.eff=="quadratic"){
+    n.env <- ncol(X$env)
+    env <- as.matrix(sparse.model.matrix(as.formula(paste("~poly(X$env[,",n.env,"],2)", collapse = " + "))))[,-1]
+    X$env <- env
+  }
+  
+  Y.stand <- as.matrix(scale(Y.hel,scale=FALSE))
+  X0 <- as.data.frame(do.call("cbind", X))
+  Y.pred <- Y; Y.pred[] <- NA
+  for(i in 1:ncol(Y)){
+    lmi <- lm(Y.stand[,i]~., data=X0)
+    Y.pred[,i] <- predict(lmi)
+  }
+  
+  # Cross-validation (LOO)
+  Y.pred.cv <- Y; Y.pred.cv[] <- NA
+  for(r in 1:nrow(Y)){
+    Yr <- Y.stand[-r,]
+    X0r <- X0[-r,,drop=F]
+    for(i in 1:ncol(Y)){
+      lmi <- lm(Yr[,i]~., data=X0r)
+      Y.pred.cv[r,i] <- predict(lmi, newdata=X0[r,,drop=F])
+    }
+  }
+  
+  nsites <- nrow(Y)
+  nterms <- ncol(X0)
   
   if(binary){
     r2 <- R2D2(Y.stand,Y.pred)["R2.multivar"]
-    r2s <- c(R2.McFadden=r2,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
+    r2.adj <- 1-(((nsites-1)/(nsites-nterms-1))*(1-r2))
+    r2.cv <- R2D2(Y.stand,Y.pred.cv)["R2.multivar"]
+    r2s.adj <- c(R2.McFadden=r2.adj,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
+    r2s.cv <- c(R2.McFadden=r2.cv,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
   }
   else{
     r2s <- R2D2(Y.stand,Y.pred)
+    r2s.adj <- 1-(((nsites-1)/(nsites-nterms-1))*(1-r2s))
+    r2s.cv <- R2D2(Y.stand,Y.pred.cv)
     r2s[c("R2.McFadden","R2.log")] <- c(NA,NA)
+    r2s.cv[c("R2.McFadden","R2.log")] <- c(NA,NA)
   }
-  return(r2s)
+  
+  res <- list(r2s.adj,r2s.cv)
+  return(res)
 }
 
 
@@ -57,18 +91,22 @@ R2.RDA <- function(Y, X, binary = FALSE){
 # CCA
 # ------------------------------------------------------------------------------
 
+## On raw abundance data
 R2.CCA <- function(Y, X, binary = FALSE){
   require(vegan)
   mod <- cca(Y, do.call("cbind", X), scannf = F) 
   R2mv <- RsquareAdj(mod)$adj.r.squared
   
   if(binary){
-    r2s <- c(R2.McFadden=R2mv,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
+    r2s.adj <- c(R2.McFadden=R2mv,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
   }
   else{
-    r2s <- c(R2.classic=NA, R2.log=NA, R2.multivar=R2mv, R2.McFadden=NA)
+    r2s.adj <- c(R2.classic=NA, R2.log=NA, R2.multivar=R2mv, R2.McFadden=NA)
   }
-  return(r2s)
+  r2s.cv <- c(R2.classic=NA, R2.log=NA, R2.multivar=NA, R2.McFadden=NA)
+  
+  res <- list(r2s.adj,r2s.cv)
+  return(res)
 }
 
 
@@ -76,8 +114,7 @@ R2.CCA <- function(Y, X, binary = FALSE){
 # dbRDA
 # ------------------------------------------------------------------------------
 
-# Using Bray-Curtis distance
-
+## On raw abundance data
 R2.dbRDA <- function(Y, X, binary = FALSE){
   require(vegan)
   BC <- vegdist(Y, method="bray", binary=binary)
@@ -85,12 +122,15 @@ R2.dbRDA <- function(Y, X, binary = FALSE){
   R2mv <- RsquareAdj(mod)$adj.r.squared
   
   if(binary){
-    r2s <- c(R2.McFadden=R2mv,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
+    r2s.adj <- c(R2.McFadden=R2mv,R2.Efron=NA,R2.Tjur=NA) # NOT McFadden!
   }
   else{
-    r2s <- c(R2.classic=NA, R2.log=NA, R2.multivar=R2mv, R2.McFadden=NA)
+    r2s.adj <- c(R2.classic=NA, R2.log=NA, R2.multivar=R2mv, R2.McFadden=NA)
   }
-  return(r2s)
+  r2s.cv <- c(R2.classic=NA, R2.log=NA, R2.multivar=NA, R2.McFadden=NA)
+  
+  res <- list(r2s.adj,r2s.cv)
+  return(res)
 }
 
 
@@ -103,6 +143,7 @@ R2.dbRDA <- function(Y, X, binary = FALSE){
 # MRM
 # ------------------------------------------------------------------------------
 
+## On raw abundance data
 R2.MRM <- function(Y, X, binary = FALSE){
   require(vegan)
   BC <- as.numeric(vegdist(Y, method="bray", binary = binary))
@@ -118,7 +159,10 @@ R2.MRM <- function(Y, X, binary = FALSE){
     r2s <- R2D2(BC,Y.pred)
     r2s[c("R2.multivar", "R2.McFadden")] <- c(NA,NA)
   }
-  return(r2s)
+  r2s.cv <- c(R2.classic=NA, R2.log=NA, R2.multivar=NA, R2.McFadden=NA)
+  
+  res <- list(r2s,r2s.cv)
+  return(res)
 }
 
 
@@ -133,96 +177,61 @@ R2.MRM <- function(Y, X, binary = FALSE){
 # install.packages("Matrix")
 
 # ------------------------------------------------------------------------------
-# GLM quasi-Poisson 
+# GLM
 # ------------------------------------------------------------------------------
 
-R2.GLM <- function(Y, X, family = "quasipoisson", interaction = FALSE){
+R2.GLM <- function(Y, X, family = "quasipoisson", env.eff = "quadratic"){
   require(Matrix)
   mem <- X$mem
   env <- X$env
+  if(!is.null(env)) n.env <- 1:ncol(env)
   
-  Y.pred <- Y
-  
-  wmem <- c()
-  for(i in 1:ncol(Y)){
-    if(!is.null(mem)){
-      # selection of MEMs
-      pvals <- numeric(ncol(mem))
-      for(j in 1:ncol(mem)){
-        glmj <- glm(Y[,i]~mem[,j], family=family)
-        pvals[j] <- coef(summary(glmj))[2,4]
-      }
-      wmem <- c(wmem,which(pvals<0.05))
+  if(!is.null(env)){
+    if(env.eff=="linear"){
+      env <- as.matrix(sparse.model.matrix(as.formula(paste("~X$env[,",n.env,"]", collapse = " + "))))[,-1]
     }
-    X$mem <- mem[,unique(wmem)]
+    if(env.eff=="quadratic"){
+      env <- as.matrix(sparse.model.matrix(as.formula(paste("~poly(X$env[,",n.env,"],2)", collapse = " + "))))[,-1]
+    }
+    X$env <- env
   }
   
-  dat <- as.data.frame(do.call("cbind",X))
-  
+  Y.pred <- Y; Y.pred[] <- NA
+  X0 <- as.data.frame(do.call("cbind",X))
+  names(X0) <- 1:ncol(X0)
   for(i in 1:ncol(Y)){
     # Estimate GLM
-    if(ncol(dat)>0){
-      if(!is.null(env)){
-        ei <- 1:ncol(env)
-        if(interaction==FALSE){
-          env <- as.matrix(sparse.model.matrix(as.formula(paste("~poly(X$env[,",ei,"],2)", collapse = " + "))))[,-1]
-        }
-        if(interaction==TRUE){
-          env <- as.matrix(sparse.model.matrix(as.formula(paste("~poly(X$env[,",ei,"],2)", collapse = " * "))))[,-1]
-        }
-        X$env <- env
-      }
-      Xi <- as.data.frame(do.call("cbind",X))
-      names(Xi) <- 1:ncol(Xi)
-      glmi <- glm(Y[,i]~., data=Xi, family=family)
-      Y.pred[,i] <- predict(glmi,type="response")
-    }
-    
-    if(ncol(dat)==0){
-      glmi <- glm(Y[,i]~1, family=family)
-      Y.pred[,i] <- predict(glmi,type="response")
+    glmi <- glm(Y[,i]~., data=X0, family=family)
+    Y.pred[,i] <- predict(glmi,type="response")
+  }
+  
+  # Cross-validation (LOO)
+  Y.pred.cv <- Y; Y.pred.cv[] <- NA
+  for(r in 1:nrow(Y)){
+    for(i in 1:ncol(Y)){
+      # Estimate GLM
+      glmi <- glm(Y[-r,i]~., data=X0[-r,,drop=F], family=family)
+      Y.pred.cv[r,i] <- predict(glmi, newdata=X0[r,,drop=F], type="response")
     }
   }
   
-  if(family=="quasipoisson") r2s <- R2D2(Y,Y.pred)
-  if(family=="binomial") r2s <- R2D2.binom(Y,Y.pred)
-  datf <- as.data.frame(do.call("cbind",X))
-  np <- ncol(datf)
-  res <- list(r2s,np)
+  nsites <- nrow(Y)
+  nterms <- ncol(X0)
+  
+  if(family %in% c("quasipoisson","gaussian")){
+    r2s <- R2D2(Y,Y.pred)
+    r2s.adj <- 1-(((nsites-1)/(nsites-nterms-1))*(1-r2s))
+    r2s.cv <- R2D2(Y,Y.pred.cv)
+  } 
+  if(family=="binomial"){
+    r2s <- R2D2.binom(Y,Y.pred)
+    r2s.adj <- 1-(((nsites-1)/(nsites-nterms-1))*(1-r2s))
+    r2s.cv <- R2D2.binom(Y,Y.pred.cv)
+  } 
+  res <- list(r2s.adj,r2s.cv)
   return(res)
 }
 
-
-# ------------------------------------------------------------------------------
-# GLMM Poisson (using HMSC)
-# ------------------------------------------------------------------------------
-
-R2.hmsc <- function(Y, X, family = "poisson", interaction = FALSE){
-  
-  require(HMSC)
-  require(Matrix)
-  
-  ## format data
-  if(interaction==FALSE && !is.null(X$env)){
-    ei <- 1:ncol(X$env)
-    env <- as.matrix(sparse.model.matrix(as.formula(paste("~poly(X$env[,",ei,"],2)", collapse = " + "))))[,-1]
-    X$env <- env
-  }
-  if(interaction==TRUE && !is.null(X$env)){
-    ei <- 1:ncol(X$env)
-    env <- as.matrix(sparse.model.matrix(as.formula(paste("~poly(X$env[,",ei,"],2)", collapse = " * "))))[,-1]
-    X$env <- env
-  }
-  formdata <- as.HMSCdata(Y = Y, X = do.call("cbind",X),
-                          scaleX = FALSE, interceptX = TRUE, interceptTr = FALSE)
-  # use a Poisson distribution for abundance data
-  m1 <- hmsc(formdata, family = family, niter = 20000, nburn = 1000, thin = 20, verbose = FALSE)
-  Y.pred <- predict(m1)
-  
-  if(family=="poisson"|family=="overPoisson") r2s <- R2D2(Y,Y.pred)
-  if(family=="probit") r2s <- R2D2.binom(Y,Y.pred)
-  return(r2s)
-}
 
 
 # ------------------------------------------------------------------------------
@@ -234,13 +243,13 @@ R2.hmsc <- function(Y, X, family = "poisson", interaction = FALSE){
 # The GAM model is fitted to each species separately.
 
 
-R2.GAM <- function(Y, X, family = "poisson", interaction = FALSE)
+R2.GAM <- function(Y, X, family = "poisson", interaction = FALSE, env.eff = "quadratic")
 {
   require(mgcv) 
   
   if(is.list(X)) names(X) <- NULL
   Y <- data.frame(Y)
-  X <- data.frame(X)
+  X0 <- data.frame(X)
   xy.indcs <- names(X) %in% c("x","y")
   
   # number of spline basis functions:
@@ -249,59 +258,84 @@ R2.GAM <- function(Y, X, family = "poisson", interaction = FALSE)
   # if only x or only y coordinate is provided
   if(sum(xy.indcs) == 1) return("Error, two coordinates must be provided.")
   
-  # interaction or no interaction?
-  if(interaction == TRUE) { operator <- " * " }
-  if(interaction == FALSE){ operator <- " + " }
+  operator <- " + "
   
   # COMPOSING THE GAM MODEL FORMULA ------------
   
   # if only xy data are provided
-  if(sum(xy.indcs) == ncol(X))
+  if(sum(xy.indcs) == ncol(X0))
   {
     Formula <- as.formula(paste("y.i ~ s(x, y, k = ", k, ")", sep=""))  
   }
   
   # if xy and environmental data are provided
-  if(sum(xy.indcs) == 2 && ncol(X) > 2)
+  if(sum(xy.indcs) == 2 && ncol(X0) > 2)
   {
     env.indcs <- xy.indcs == FALSE
     env.names <-  names(X)[env.indcs]
     
-    env.part <- paste("poly(", env.names, ", 2)", collapse = operator)
+    if(env.eff=="linear"){ 
+      env.part <- paste(env.names, collapse = operator)
+    } else{
+      env.part <- paste("poly(", env.names, ", 2)", collapse = operator)
+    } 
     
-    # if we also want the interaction term between the environmental effects
-    Formula <- as.formula(paste(paste("y.i ~ s(x, y, k=", k, ")", sep=""), 
-                                env.part, sep= " + ")) 
+    Formula <- as.formula(paste(paste("y.i ~ s(x, y, k=", k, ")", sep=""), env.part, sep= " + ")) 
   }
   
   # if only environmental data are provided
   if(sum(xy.indcs) == 0)
   {
-    env.part <- paste("poly(", names(X), ", 2)", collapse = operator)
+    if(env.eff=="linear"){ 
+      env.part <- paste(names(X0), collapse = operator)
+    } else{
+      env.part <- paste("poly(", names(X0), ", 2)", collapse = operator)
+    } 
     Formula  <- as.formula(paste("y.i ~", env.part)) 
   }
   
   # FITTING THE GAM MODELS -----------------
   
-  preds <- Y; preds[] <- NA # empty container for predictions
-  
   # the model fitting loop -- doing GAM for each species
-  for(i in 1:ncol(Y))
-  {
+  preds <- Y; preds[] <- NA # empty container for predictions
+  for(i in 1:ncol(Y)){
     y.i <- Y[,i]
-    XY <- data.frame(y.i = y.i, X)
-    
+    XY <- data.frame(y.i = y.i, X0)
     # Fit the GAM model
-    
     m.i <- gam(Formula, data = XY, family=family, method="GCV.Cp")
     preds[,i] <- predict(m.i, type="response")
   }
   
-  # ASSESSING MODEL FIT (VARIATION AND DEVIANCE EXPLAINED)
-  if(family=="poisson") fit <- R2D2(Y.obs = as.matrix(Y), Y.pred =  as.matrix(preds))
-  if(family=="binomial") fit <- R2D2.binom(Y.obs = as.matrix(Y), Y.pred =  as.matrix(preds))
+  # Cross-validation (LOO)
+  preds.cv <- Y; preds.cv[] <- NA # empty container for predictions
+  for(r in 1:nrow(Y)){
+    for(i in 1:ncol(Y)){
+      y.i <- Y[-r,i]
+      XYr <- data.frame(y.i = y.i, X0[-r,,drop=F])
+      # Fit the GAM model
+      m.i <- gam(Formula, data = XYr, family=family, method="GCV.Cp")
+      preds.cv[r,i] <- predict(m.i, newdata=XY[r,-1,drop=F], type="response")
+    }
+  }
   
-  return(fit)
+  nsites <- nrow(Y)
+  if(!is.null(X$env) && env.eff=="linear") nenv <- 1
+  if(!is.null(X$env) && env.eff=="quadratic") nenv <- 2
+  
+  # ASSESSING MODEL FIT (VARIATION AND DEVIANCE EXPLAINED)
+  if(family %in% c("poisson","gaussian")){
+    r2s <- R2D2(Y.obs = as.matrix(Y), Y.pred =  as.matrix(preds))
+    if(!is.null(X$env)) r2s <- 1-(((nsites-1)/(nsites-nenv-1))*(1-r2s)) # only adjust according to the env terms
+    r2s.cv <- R2D2(Y.obs = as.matrix(Y), Y.pred =  as.matrix(preds.cv))
+  } 
+  if(family=="binomial"){
+    r2s <- R2D2.binom(Y.obs = as.matrix(Y), Y.pred =  as.matrix(preds))
+    if(!is.null(X$env)) r2s <- 1-(((nsites-1)/(nsites-nenv-1))*(1-r2s))
+    r2s.cv <- R2D2.binom(Y.obs = as.matrix(Y), Y.pred =  as.matrix(preds.cv))
+  } 
+  
+  res <- list(r2s, r2s.cv)
+  return(res)
 }
 
 
@@ -362,26 +396,60 @@ R2.MVRegTree <- function(Y, X, binary = FALSE, CV = FALSE)
     preds <- predict(mvtree, type="matrix") # modif AJ 30.08.18
   }
   
-  else
-  {
+  else{
     mvtree <- mvpart(data.matrix(XY[, Y.indcs]) ~ data.matrix(XY[, X.indcs]), 
                      data = XY,
                      minbucket= 5,  # minimum required N per terminal node
                      minauto = FALSE,
                      xv = "none", 
                      plot.add=FALSE)
-    
     preds <- predict(mvtree, type="matrix") # modif AJ 30.08.18
+    
+    # Cross-validation (LOO)
+    preds.cv <- Y; preds.cv[] <- NA # empty container for predictions
+    for(r in 1:nrow(XY)){
+      XYr <- XY[-r,]
+      if(length(X.indcs)==1){
+        mvtree <- mvpart(data.matrix(XYr[, Y.indcs]) ~ E, 
+                         data = XYr,
+                         minbucket= 5,  # minimum required N per terminal node
+                         minauto = FALSE,
+                         xv = "none", 
+                         plot.add=FALSE)
+      }
+      if(length(X.indcs)==2){
+        mvtree <- mvpart(data.matrix(XYr[, Y.indcs]) ~ xy.x + xy.y, 
+                         data = XYr,
+                         minbucket= 5,  # minimum required N per terminal node
+                         minauto = FALSE,
+                         xv = "none", 
+                         plot.add=FALSE)
+      }
+      if(length(X.indcs)==3){
+        mvtree <- mvpart(data.matrix(XYr[, Y.indcs]) ~ E + xy.x + xy.y, 
+                         data = XYr,
+                         minbucket= 5,  # minimum required N per terminal node
+                         minauto = FALSE,
+                         xv = "none", 
+                         plot.add=FALSE)
+      }
+      preds.cv[r,] <- predict(mvtree, newdata=XY[c(r,r), X.indcs, drop=F], type="matrix")[1,]
+    }
+    
   }
   
   
-  if(binary)
-  {
+  if(binary){
     fit <- R2D2.binom(Y.obs = Y, Y.pred = preds)
+    fit.cv <- R2D2.binom(Y.obs = Y, Y.pred = preds.cv)
   }
-  else fit <- R2D2(Y.obs = Y, Y.pred = preds)
+  else{
+    fit <- R2D2(Y.obs = Y, Y.pred = preds)
+    fit.cv <- R2D2(Y.obs = Y, Y.pred = preds.cv)
+  } 
   
-  return(fit)
+  res <- list(fit, fit.cv)
+  return(res)
 }
 
 # R2.MVRegTree(Y = mat.sp, X = mat.env, binary = TRUE, CV=TRUE)
@@ -394,45 +462,63 @@ R2.MVRegTree <- function(Y, X, binary = FALSE, CV = FALSE)
 # A classical univariate randomForest model is fitted to each species separately,
 # using the X predictors. 
 
-R2.UniRndForest <- function(Y, X, binary = FALSE)
+R2.UniRndForest <- function(Y, X, binary = FALSE, sampsize="default")
 {
   
   X <- data.frame(X)
   Y <- Y.pred <- data.frame(Y)
   Y.pred[] <- 0 # empty container for predictions
   
-  if(binary) 
-  {
+  if(binary) {
     Y[Y > 1] <- 1
     Y.orig <- Y
     for(i in 1:ncol(Y)) Y[,i] <- as.factor(Y[,i])
   }
   
+  if(sampsize=="default") sampsize <- nrow(Y)-1
+  if(sampsize==0.2) sampsize <- ceiling(nrow(Y)/5)
+  
   # calculate random forest for each species separately
-  for(spec.i in 1:ncol(Y))
-  {
+  for(spec.i in 1:ncol(Y)){
     rf.i <- randomForest::randomForest(x = X, 
                                        y = Y[,spec.i], 
                                        ntree = 500,
-                                       nodesize = 5)
-    if(binary)
-    {
-      Y.pred[,spec.i] <- predict(rf.i, type = "prob")
+                                       #nodesize = 5,
+                                       sampsize = sampsize)
+    if(binary){
+      Y.pred[,spec.i] <- predict(rf.i, type = "prob")[,2]
     }
     else Y.pred[,spec.i] <- predict(rf.i)
   }
   
-  if(binary)
-  {
-    # extract probabilities for vote oucome = 1 (that is the .1 pattern below)
-    Y.pred <- as.matrix(Y.pred)
-    Y.pred <- Y.pred[, grep(x = colnames(Y.pred), pattern=".1", fixed=TRUE)]
-    fit <- R2D2.binom(Y.obs = Y.orig, Y.pred = Y.pred)
+  # Cross-validation (LOO)
+  Y.pred.cv <- Y; Y.pred.cv[] <- NA # empty container for predictions
+  for(r in 1:nrow(Y)){
+    for(spec.i in 1:ncol(Y)){
+      rf.i <- randomForest::randomForest(x = X[-r,,drop=F], 
+                                         y = Y[-r,spec.i], 
+                                         ntree = 500,
+                                         #nodesize = 5,
+                                         sampsize = sampsize)
+      if(binary){
+        Y.pred.cv[r,spec.i] <- predict(rf.i, newdata=X[r,,drop=F], type = "prob")[,2]
+      }
+      else Y.pred.cv[r,spec.i] <- predict(rf.i, newdata=X[r,,drop=F])
+    }
   }
   
-  else fit <- R2D2(Y.obs = Y, Y.pred = Y.pred)
   
-  return(fit)
+  if(binary){
+    fit <- R2D2.binom(Y.obs = Y.orig, Y.pred = Y.pred)
+    fit.cv <- R2D2.binom(Y.obs = Y.orig, Y.pred = Y.pred.cv)
+  }
+  else{
+    fit <- R2D2(Y.obs = Y, Y.pred = Y.pred)
+    fit.cv <- R2D2(Y.obs = Y, Y.pred = Y.pred.cv)
+  } 
+  
+  res <- list(fit, fit.cv)
+  return(res)
 }
 
 # R2.UniRndForest(Y = mat.sp, X = mat.env, binary = TRUE)
@@ -454,8 +540,7 @@ R2.MVRndForest <- function(Y, X, binary = FALSE, CV = FALSE)
   require(randomForestSRC)
   Y.orig <- Y
   
-  if(binary) 
-  {
+  if(binary) {
     Y[Y > 1] <- 1
     Y.orig <- Y
     Y <- data.frame(Y)
@@ -471,14 +556,12 @@ R2.MVRndForest <- function(Y, X, binary = FALSE, CV = FALSE)
                 ") ~ .")
   fmla <- as.formula(fmla)
   
-  if(CV) 
-  {
+  if(CV) {
     # calculate OOB error for random forests with different node sizes
     # in order to choose the optimal one
     settings <- list(nodesizes = c(2:15))
     
-    for(i in 1:length(settings$nodesizes))
-    {
+    for(i in 1:length(settings$nodesizes)){
       # fit the multivariate random forest model    
       rf <- rfsrc(fmla,
                   nodesize=settings$nodesizes[i],
@@ -487,8 +570,7 @@ R2.MVRndForest <- function(Y, X, binary = FALSE, CV = FALSE)
                   statistics =TRUE)
       # calculate the mean OOB squared error
       Y.pred <- get.mv.predicted(rf, oob=TRUE)
-      if(binary)
-      {
+      if(binary){
         Y.pred <- Y.pred[,grep(x = colnames(Y.pred), pattern=".1", fixed=TRUE)]
       }
       
@@ -500,26 +582,42 @@ R2.MVRndForest <- function(Y, X, binary = FALSE, CV = FALSE)
   else best.nodesize = 5
   
   # fit the random forest with the lowest OOB error
-  rf.best <- rfsrc(fmla,
-                   nodesize=best.nodesize,
-                   data=XY)
+  rf.best <- rfsrc(fmla, nodesize=best.nodesize, data=XY)
+  if(binary){
+    Y.pred <- predict(rf.best, newdata=XY[,-(1:ncol(Y)),drop=F])
+    Y.pred <- do.call("cbind",lapply(Y.pred$classOutput,function(x) x$predicted[,2]))
+  }
+  else{
+    Y.pred <- predict(rf.best, newdata=XY[,-(1:ncol(Y)),drop=F])
+    Y.pred <- do.call("cbind",lapply(Y.pred$regrOutput,function(x) x$predicted))
+  } 
+  
+  # Cross-validation (LOO)
+  Y.pred.cv <- Y; Y.pred.cv[] <- NA # empty container for predictions
+  for(r in 1:nrow(XY)){
+    rf.best <- rfsrc(fmla, nodesize=best.nodesize, data=XY[-r,])
+    if(binary){
+      Y.pred.cv0 <- predict(rf.best, newdata=XY[r,-(1:ncol(Y)),drop=F])
+      Y.pred.cv[r,] <- do.call("cbind",lapply(Y.pred.cv0$classOutput,function(x) x$predicted[,2]))
+    }
+    else{
+      Y.pred.cv0 <- predict(rf.best, newdata=XY[r,-(1:ncol(Y)),drop=F])
+      Y.pred.cv[r,] <- do.call("cbind",lapply(Y.pred.cv0$regrOutput,function(x) x$predicted))
+    } 
+  }
   
   # predictions
-  if(binary)
-  {
-    Y.pred <- get.mv.predicted(rf.best, oob=FALSE)
-    Y.pred <- as.matrix(Y.pred)
-    Y.pred <- Y.pred[, grep(x = colnames(Y.pred), pattern=".1", fixed=TRUE)]
+  if(binary){
     fit <- R2D2.binom(Y.obs = Y.orig, Y.pred = Y.pred)
+    fit.cv <- R2D2.binom(Y.obs = Y.orig, Y.pred = Y.pred.cv)
   }
-  else 
-  {
-    Y.pred <- get.mv.predicted(rf.best, oob=FALSE)
+  else {
     fit <- R2D2(Y.obs = Y, Y.pred = Y.pred)
-    # plot(Y, Y.pred); abline(a=0, b=1, col="red")
+    fit.cv <- R2D2(Y.obs = Y, Y.pred = Y.pred.cv)
   }
   
-  return(fit)
+  res <- list(fit, fit.cv)
+  return(res)
 }
 
 # R2.MVRndForest(Y = mat.sp, X = mat.env, binary = TRUE, CV = TRUE)
@@ -576,43 +674,61 @@ R2.BRT <- function(Y, X, binary = FALSE, CV = FALSE, inter.depth = 3)
                 cv.folds = cv.folds) # 5-fold cross-validation on the training set
   
   # How many regression trees should be used for the predictions?
-  if(CV)
-  {
+  if(CV){
     best.n.trees <-  mvbrt$best.trees$best.cv 
-    message(best.n.trees)
+    #message(best.n.trees)
   }
   else { best.n.trees = 1000  }
   
+  # Helper function (inverse logit transformation)
+  inverse.logit <- function(x) exp(x)/(1+exp(x))
+  
   # predicted values, using the best number of trees
-  if(distr == "bernoulli")
-  {
-    inverse.logit <- function(x) exp(x)/(1+exp(x))
-    preds <- inverse.logit(predict(mvbrt, newdata = X, n.trees = best.n.trees) )
-    #hist(preds)
-  }
-  if(distr == "poisson")
-  {
-    preds <- exp( predict(mvbrt, newdata = X, n.trees = best.n.trees) )
-  }
-  if(distr == "gaussian")
-  {
-    preds <-  predict(mvbrt, newdata = X, n.trees = best.n.trees) 
-  }
+  if(distr == "bernoulli") preds <- inverse.logit(predict(mvbrt, newdata = X, n.trees = best.n.trees) )
+  if(distr == "poisson") preds <- exp( predict(mvbrt, newdata = X, n.trees = best.n.trees) )
+  if(distr == "gaussian") preds <-  predict(mvbrt, newdata = X, n.trees = best.n.trees) 
   
   good.spec <- is.nan(colSums(preds)) == FALSE # some species have NaNs
   # remove the species for which NaNs are produced
   preds <- preds[, good.spec]
-  Y <- Y[, good.spec]
+  Y.orig <- Y[, good.spec]
+  
+  # Cross-validation (LOO)
+  preds.cv <- Y; preds.cv[] <- NA # empty container for predictions
+  for(r in 1:nrow(Y)){
+    mvbrt <- mvtb(Y = Y[-r,], # responses
+                  X = X[-r,,drop=F], # predictors
+                  distribution = distr, # since we have count data
+                  shrinkage = shrink, # a.k.a. learning rate, or weight of each tree
+                  interaction.depth=inter.depth,
+                  n.trees=max.trees,
+                  iter.details = TRUE,
+                  cv.folds = 0) # 5-fold cross-validation on the training set
+    
+    # predicted values, using the best number of trees
+    if(distr == "bernoulli") preds.cv[r,] <- inverse.logit(predict(mvbrt, newdata = X[r,,drop=F], n.trees = best.n.trees) )
+    if(distr == "poisson") preds.cv[r,] <- exp( predict(mvbrt, newdata = X[r,,drop=F], n.trees = best.n.trees) )
+    if(distr == "gaussian") preds.cv[r,] <-  predict(mvbrt, newdata = X[r,,drop=F], n.trees = best.n.trees) 
+  }
+  good.spec.cv <- is.nan(colSums(preds.cv)) == FALSE # some species have NaNs
+  # remove the species for which NaNs are produced
+  preds.cv <- preds.cv[, good.spec.cv]
+  Y.cv <- Y[, good.spec.cv]
   
   # calculate R2s
-  if(binary)
-  {
-    fit <- R2D2.binom(Y.obs = Y, Y.pred = preds)
+  if(binary){
+    fit <- R2D2.binom(Y.obs = Y.orig, Y.pred = preds)
+    fit.cv <- R2D2.binom(Y.obs = Y.cv, Y.pred = preds.cv)
   }
-  else {fit <- R2D2(Y = Y, Y.pred = preds)}
+  else{
+    fit <- R2D2(Y = Y.orig, Y.pred = preds)
+    fit.cv <- R2D2(Y = Y.cv, Y.pred = preds.cv)
+  }
   
-  return(fit)
+  res <- list(fit, fit.cv)
+  return(res)
 }
 
 
 # R2.BRT(Y = mat.sp, X = mat.env, binary = TRUE, inter.depth = 1, CV = FALSE)
+
