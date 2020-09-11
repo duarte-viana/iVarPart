@@ -1,6 +1,6 @@
 ###########################################
-# Supporting Information
-# "Partitioning environment and space in species-by-site matrices: a comparison of methods for community ecology and macroecology"
+# Supporting Information, Appendix S2
+# "Partitioning environment and space in site-by-species matrices: a comparison of methods for community ecology and macroecology"
 # Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 ###########################################
 
@@ -92,6 +92,7 @@ R2.classic <- function(Y.obs, Y.pred)
 
 # ------------------------------------------------------------------------------
 # 4. log-R2 function averaged over species
+# NOT USED in the end
 R2.log <- function(Y.obs, Y.pred)
 {
   Y <- as.matrix(Y.obs)
@@ -123,24 +124,6 @@ R2D2 <- function(Y.obs, Y.pred)
   res[res < 0] <- 0 # change negative values to 0
   return(res)
 }
-
-
-# ------------------------------------------------------------------------------
-# Function to perform variation partitioning (Clappe et al. 2018)
-# Code adapted from the adespatial package
-# Dray's github for the MSR (Clappe et al.)
-# https://github.com/sdray/adespatial/blob/master/R/msr.varipart.R
-VarPartClap <- function(ab.ini, bc.ini, bc.ini.adj, abc.ini, msr.ab, msr.abc){
-  a.ini <- abc.ini-bc.ini
-  ab.adj <- 1 - (1 - ab.ini) / (1-mean(msr.ab))
-  a.adj <- 1 - (1 - a.ini) / (1 - mean(msr.abc - bc.ini))
-  b.adj <- ab.adj - a.adj
-  c.adj <- bc.ini.adj - b.adj
-  d.adj <- 1 - (a.adj + b.adj + c.adj)
-  R2.adj.msr <- c(a.adj, b.adj, c.adj, d.adj)
-  return(R2.adj.msr)
-}
-
 
 
 ################################################################################
@@ -213,3 +196,16 @@ R2D2.binom <- function(Y.obs, Y.pred)
   return(res)
 }
 
+
+
+################################################################################
+
+# Function to perform variation partitioning (two components of variation)
+VarPart <- function(ab,bc,abc){
+  a<-abc-bc
+  b<-ab+bc-abc
+  c<-abc-ab
+  d<-1-abc
+  R2 <- c(a, b, c, d)
+  return(R2)
+}
