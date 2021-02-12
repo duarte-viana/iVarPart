@@ -1,6 +1,6 @@
 ###########################################
-# Supporting Information, Appendix S2
-# "Partitioning environment and space in site-by-species matrices: a comparison of methods for community ecology and macroecology"
+# Supporting Information
+# "Disentangling spatial and environmental effects: flexible methods for community ecology and macroecology"
 # Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 ###########################################
 
@@ -15,6 +15,38 @@
 # Y.pred - a matrix or data.frame of PREDICTED species abundances,
 #         where species are columns and sites are rows
 
+################################################################################
+
+# ------------------------------------------------------------------------------
+# Correlation-based R2 metric
+# ------------------------------------------------------------------------------
+
+cor2 <- function(Y.obs, Y.pred, method="pearson", adjust=FALSE, N, P){
+  require(ltm)
+  
+  Y <- as.matrix(Y.obs)
+  pred.mat <- as.matrix(Y.pred)
+  r2s <- numeric(ncol(Y))
+  if(method %in% c("pearson","spearman")){
+    for(i in 1:ncol(Y)){
+      r2s[i] <- cor(pred.mat[,i], Y[,i], method=method)^2
+    }
+  }
+  if(method=="binary"){
+    for(i in 1:ncol(Y)){
+      r2s[i] <- biserial.cor(pred.mat[,i], Y[,i], level=2)^2
+    }
+  }
+  
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
+  r2 <- mean(r2s)
+  return(r2)
+}
+
+
+################################################################################
+# Measures for continuous outcomes (e.g. abundance data)
 
 # ------------------------------------------------------------------------------
 # 0. Supporting function: Poisson deviance
@@ -31,7 +63,7 @@ Poisson.deviance <- function(Y, mu)
 
 # ------------------------------------------------------------------------------
 # 1. Explained deviance calculated for each species, then averaged
-D2.Poisson <- function(Y.obs, Y.pred)
+D2.Poisson <- function(Y.obs, Y.pred, adjust=FALSE, N, P)
 {
   Y <- as.matrix(Y.obs)
   mu <- as.matrix(Y.pred) # we assume that the predicted values are the Poisson mu
@@ -45,7 +77,10 @@ D2.Poisson <- function(Y.obs, Y.pred)
   
   D2s <- 1 - resid.devs/null.devs
   D2s[D2s < 0] <- 0 # change negative values to 0
-  D2s[is.nan(D2s)] <-0
+  #D2s[is.nan(D2s)] <-0
+  # Adjust R2?
+  if(adjust) D2s <- 1-(((N-1)/(N-P-1))*(1-D2s))
+  D2s[D2s < 0] <- 0
   D2 <- mean(D2s)
   
   return(D2)
@@ -54,7 +89,7 @@ D2.Poisson <- function(Y.obs, Y.pred)
 
 # ------------------------------------------------------------------------------
 # 2. R2 function for multivariate responses using the "trace" statistic
-R2.multivar <- function(Y.obs, Y.pred)
+R2.multivar <- function(Y.obs, Y.pred, adjust=FALSE, N, P)
 {
   Y <- as.matrix(Y.obs)
   pred.mat <- as.matrix(Y.pred)
@@ -65,6 +100,8 @@ R2.multivar <- function(Y.obs, Y.pred)
   ev <- eigenS$values[1:kc]
   trace <- sum(diag(cov(as.matrix(Y))))
   r2 <- sum(ev/trace)
+  # Adjust R2?
+  if(adjust) r2 <- 1-(((N-1)/(N-P-1))*(1-r2))
   return(r2)
   
 }
@@ -72,7 +109,7 @@ R2.multivar <- function(Y.obs, Y.pred)
 
 # ------------------------------------------------------------------------------
 # 3. R2 classic function averaged over species
-R2.classic <- function(Y.obs, Y.pred)
+R2.classic <- function(Y.obs, Y.pred, adjust=FALSE, N, P)
 {
   Y <- as.matrix(Y.obs)
   pred.mat <- as.matrix(Y.pred)
@@ -84,7 +121,10 @@ R2.classic <- function(Y.obs, Y.pred)
   }
   
   r2s[r2s < 0] <- 0 # change negative values to 0
-  r2s[is.nan(r2s)] <- 0
+  #r2s[is.nan(r2s)] <- 0
+  # Adjust R2?
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
   r2 <- mean(r2s)
   return(r2)
 }
@@ -92,8 +132,7 @@ R2.classic <- function(Y.obs, Y.pred)
 
 # ------------------------------------------------------------------------------
 # 4. log-R2 function averaged over species
-# NOT USED in the end
-R2.log <- function(Y.obs, Y.pred)
+R2.log <- function(Y.obs, Y.pred, adjust=FALSE, N, P)
 {
   Y <- as.matrix(Y.obs)
   pred.mat <- as.matrix(Y.pred)
@@ -105,7 +144,10 @@ R2.log <- function(Y.obs, Y.pred)
   }
   
   r2s[r2s < 0] <- 0 # change negative values to 0
-  r2s[is.nan(r2s)] <-0
+  #r2s[is.nan(r2s)] <-0
+  # Adjust R2?
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
   r2 <- mean(r2s)
   return(r2)
 }
@@ -115,15 +157,15 @@ R2.log <- function(Y.obs, Y.pred)
 # ------------------------------------------------------------------------------
 # Function that calculates all of the functions above
 
-R2D2 <- function(Y.obs, Y.pred)
-{
-  res <-  c(R2.classic = R2.classic(Y.obs, Y.pred), 
-            R2.log = R2.log(Y.obs, Y.pred),
-            R2.multivar  = R2.multivar(Y.obs, Y.pred), 
-            R2.McFadden = D2.Poisson(Y.obs, Y.pred))
+R2D2 <- function(Y.obs, Y.pred, adjust=FALSE, N, P){
+  res <-  c(R2.classic = R2.classic(Y.obs, Y.pred, adjust=FALSE, N, P), 
+            R2.log = R2.log(Y.obs, Y.pred, adjust=FALSE, N, P),
+            R2.multivar  = R2.multivar(Y.obs, Y.pred, adjust=FALSE, N, P), 
+            R2.McFadden = D2.Poisson(Y.obs, Y.pred, adjust=FALSE, N, P))
   res[res < 0] <- 0 # change negative values to 0
   return(res)
 }
+
 
 
 ################################################################################
@@ -176,7 +218,7 @@ D2.binom <- function(Y.obs, Y.pred)
 # Function that calculates the functions above for all species and averages them
 # across the species
 
-R2D2.binom <- function(Y.obs, Y.pred)
+R2D2.binom <- function(Y.obs, Y.pred, adjust=FALSE, N, P)
 {
   Y.obs <- as.matrix(Y.obs)
   Y.pred <- as.matrix(Y.pred) 
@@ -190,22 +232,12 @@ R2D2.binom <- function(Y.obs, Y.pred)
   }
   res <- do.call(rbind, res)
   res[res < 0] <- 0 # change negative values to 0
-  res[is.nan(res)] <- 0
+  #3res[is.nan(res)] <- 0
+  # Adjust R2?
+  if(adjust) res <- 1-(((N-1)/(N-P-1))*(1-res))
+  res[res < 0] <- 0 # change negative values to 0
 
   res <- colMeans(res, na.rm = TRUE)
   return(res)
 }
 
-
-
-################################################################################
-
-# Function to perform variation partitioning (two components of variation)
-VarPart <- function(ab,bc,abc){
-  a<-abc-bc
-  b<-ab+bc-abc
-  c<-abc-ab
-  d<-1-abc
-  R2 <- c(a, b, c, d)
-  return(R2)
-}
