@@ -1,8 +1,10 @@
-##############
-## iVarPart ##
-##############
+###########################################
+# Supporting Information
+# "Disentangling spatial and environmental effects: flexible methods for community ecology and macroecology"
+# Duarte S. Viana, Petr Keil, Alienor Jeliazkov
+###########################################
 
-# setwd("~/Documents/Papers/iDiv/Paper_process_inference/EVE")
+# Model fitting
 
 # Passing arguments to R from command lines
 args = commandArgs(trailingOnly=TRUE)
@@ -483,7 +485,4 @@ if(pars$data.type[task.id]=="binary"){
 
 # Save output to a .Rdata file
 save(lout,file=output.file)
-
-
-
 
