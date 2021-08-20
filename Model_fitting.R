@@ -10,8 +10,17 @@
 args = commandArgs(trailingOnly=TRUE)
 output.file <- args[1]
 
-# try to get SGE_TASK_ID from submit script, otherwise fall back to 1
-task.id = as.integer(Sys.getenv("SGE_TASK_ID", "1"))
+# try to get SLURM_ARRAY_TASK_ID  from submit script, otherwise fall back to 1
+task.id = as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", "1"))
+
+# Load packages
+library(Matrix)
+library(vegan)
+library(mgcv) 
+library(mvpart)
+library(randomForest)
+library(randomForestSRC)
+library(mvtboost)
 
 # load functions
 source("Methods_functions.R")
@@ -30,7 +39,7 @@ mat.spa <- simn$mat.spa
 mat.xy <- simn$mat.xy
 
 # Gather methods names
-meths <- c("RDA", "MRM", 
+meths <- c("RDA", "RDA",  "MRM", 
            "GLM", "GAM", "GAM",
            "BRT", "BRT", "BRT", "UniRndForest", "UniRndForest", "UniRndForest", 
            "MVRndForest", "MVRndForest", "MVRndForest", "MVRegTree", "MVRegTree", "MVRegTree")
@@ -65,9 +74,23 @@ if(pars$data.type[task.id]=="normal"){
         preds.spa <- do.call(meths[m],list(mat.sp.log,list(mem=mat.spa),env.eff="quadratic"))
         preds.env.spa <- do.call(meths[m],list(mat.sp.log,list(env=mat.env,mem=mat.spa),env.eff="quadratic"))
       }
+      if(m %in% 2 && pars$resp[task.id]=="linear"){
+        # Calculate the R2 for each model
+        preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),transform="hellinger"))
+        preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),transform="hellinger"))
+        preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),transform="hellinger"))
+      }
+      # RDA with quadratic effect of X (env)
+      if(m %in% 2  && pars$resp[task.id]=="gaussian"){
+        mat.sp.log <- log(mat.sp+1)
+        # Calculate the R2 for each model
+        preds.env <- do.call(meths[m],list(mat.sp.log,list(env=mat.env),env.eff="quadratic",transform="hellinger"))
+        preds.spa <- do.call(meths[m],list(mat.sp.log,list(mem=mat.spa),env.eff="quadratic",transform="hellinger"))
+        preds.env.spa <- do.call(meths[m],list(mat.sp.log,list(env=mat.env,mem=mat.spa),env.eff="quadratic",transform="hellinger"))
+      }
       
       # Distance based regression (MRM)
-      if(m %in% c(2)){
+      if(m %in% c(3)){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy)))
@@ -75,13 +98,13 @@ if(pars$data.type[task.id]=="normal"){
       }
       
       # GLM 
-      if(m %in% 3  && pars$resp[task.id]=="linear"){
+      if(m %in% 4  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="gaussian"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),env.eff="linear",family="gaussian"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),env.eff="linear",family="gaussian"))
       }
-      if(m %in% 3  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 4  && pars$resp[task.id]=="gaussian"){
         mat.sp.log <- log(mat.sp+1)
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp.log,list(env=mat.env),family="gaussian"))
@@ -90,25 +113,25 @@ if(pars$data.type[task.id]=="normal"){
       }
       
       # GAM
-      if(m %in% 4  && pars$resp[task.id]=="linear"){
+      if(m %in% 5  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="gaussian"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),env.eff="linear",family="gaussian"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),env.eff="linear",family="gaussian"))
       }
-      if(m %in% 4  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 5  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="gaussian",k.env=3))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),family="gaussian",k.env=3))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),family="gaussian",k.env=3))
       }
-      if(m %in% 5  && pars$resp[task.id]=="linear"){
+      if(m %in% 6  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="gaussian",k.spa=10,fx=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),env.eff="linear",family="gaussian",k.spa=10,fx=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),env.eff="linear",family="gaussian",k.spa=10,fx=TRUE))
       }
-      if(m %in% 5  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 6  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="gaussian",k.env=3,k.spa=10,fx=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),family="gaussian",k.env=3,k.spa=10,fx=TRUE))
@@ -117,49 +140,49 @@ if(pars$data.type[task.id]=="normal"){
       
       # Tree-based methods
       
-      if(m %in% c(6,9,12,15)){
+      if(m %in% c(7,10,13,16)){
         # BRT, UniRndForest, MVRndForest, MVRegTree with default settings
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy)))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy)))
       }
       
-      if(m %in% c(7)){
+      if(m %in% c(8)){
         # BRT
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),shrink=0.1))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),shrink=0.1))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),shrink=0.1))
       }
       
-      if(m %in% c(8)){
+      if(m %in% c(9)){
         # BRT with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),inter.depth=1))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa),inter.depth=1))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.spa),inter.depth=1))
       }
       
-      if(m %in% c(10,13)){
+      if(m %in% c(11,14)){
         # UniRndForest, MVRndForest 
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),sampsize=0.2))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),sampsize=0.2))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),sampsize=0.2))
       }
       
-      if(m %in% c(11,14)){
+      if(m %in% c(12,15)){
         # UniRndForest, MVRndForest with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa)))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.spa)))
       }
       
-      if(m %in% c(16)){
+      if(m %in% c(17)){
         # MVRegTree
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),CV=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),CV=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),CV=TRUE))
       }
       
-      if(m %in% c(17)){
+      if(m %in% c(18)){
         # MVRegTree with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa)))
@@ -208,9 +231,23 @@ if(pars$data.type[task.id]=="counts"){
         preds.spa <- do.call(meths[m],list(mat.sp.log,list(mem=mat.spa),env.eff="quadratic"))
         preds.env.spa <- do.call(meths[m],list(mat.sp.log,list(env=mat.env,mem=mat.spa),env.eff="quadratic"))
       }
+      if(m %in% 2 && pars$resp[task.id]=="linear"){
+        # Calculate the R2 for each model
+        preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),transform="hellinger"))
+        preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),transform="hellinger"))
+        preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),transform="hellinger"))
+      }
+      # RDA with quadratic effect of X (env)
+      if(m %in% 2  && pars$resp[task.id]=="gaussian"){
+        mat.sp.log <- log(mat.sp+1)
+        # Calculate the R2 for each model
+        preds.env <- do.call(meths[m],list(mat.sp.log,list(env=mat.env),env.eff="quadratic",transform="hellinger"))
+        preds.spa <- do.call(meths[m],list(mat.sp.log,list(mem=mat.spa),env.eff="quadratic",transform="hellinger"))
+        preds.env.spa <- do.call(meths[m],list(mat.sp.log,list(env=mat.env,mem=mat.spa),env.eff="quadratic",transform="hellinger"))
+      }
       
       # Distance based regression (MRM)
-      if(m %in% c(2)){
+      if(m %in% c(3)){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy)))
@@ -218,13 +255,13 @@ if(pars$data.type[task.id]=="counts"){
       }
       
       # GLM
-      if(m %in% 3  && pars$resp[task.id]=="linear"){
+      if(m %in% 4  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="quasipoisson"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),env.eff="linear",family="quasipoisson"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),env.eff="linear",family="quasipoisson"))
       }
-      if(m %in% 3  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 4  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="quasipoisson"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),family="quasipoisson"))
@@ -232,25 +269,25 @@ if(pars$data.type[task.id]=="counts"){
       }
       
       # GAM
-      if(m %in% 4  && pars$resp[task.id]=="linear"){
+      if(m %in% 5  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="poisson"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),env.eff="linear",family="poisson"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),env.eff="linear",family="poisson"))
       }
-      if(m %in% 4  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 5  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="poisson",k.env=3))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),family="poisson",k.env=3))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),family="poisson",k.env=3))
       }
-      if(m %in% 5  && pars$resp[task.id]=="linear"){
+      if(m %in% 6  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="poisson",k.spa=10,fx=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),env.eff="linear",family="poisson",k.spa=10,fx=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),env.eff="linear",family="poisson",k.spa=10,fx=TRUE))
       }
-      if(m %in% 5  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 6  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="poisson",k.env=3,k.spa=10,fx=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),family="poisson",k.env=3,k.spa=10,fx=TRUE))
@@ -259,56 +296,56 @@ if(pars$data.type[task.id]=="counts"){
       
       # Tree-based methods
       
-      if(m %in% c(6)){
+      if(m %in% c(7)){
         # BRT
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),distr="poisson"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),distr="poisson"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),distr="poisson"))
       }
       
-      if(m %in% c(7)){
+      if(m %in% c(8)){
         # BRT
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),shrink=0.1,distr="poisson"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),shrink=0.1,distr="poisson"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),shrink=0.1,distr="poisson"))
       }
       
-      if(m %in% c(8)){
+      if(m %in% c(9)){
         # BRT with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),inter.depth=1,distr="poisson"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa),inter.depth=1,distr="poisson"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.spa),inter.depth=1,distr="poisson"))
       }
       
-      if(m %in% c(9,12,15)){
+      if(m %in% c(10,13,16)){
         # UniRndForest, MVRndForest, MVRegTree with default settings
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy)))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy)))
       }
       
-      if(m %in% c(10,13)){
+      if(m %in% c(11,14)){
         # UniRndForest, MVRndForest
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),sampsize=0.2))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),sampsize=0.2))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),sampsize=0.2))
       }
       
-      if(m %in% c(11,14)){
+      if(m %in% c(12,15)){
         # UniRndForest, MVRndForest with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa)))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.spa)))
       }
       
-      if(m %in% c(16)){
+      if(m %in% c(17)){
         # MVRegTree
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),CV=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),CV=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),CV=TRUE))
       }
       
-      if(m %in% c(17)){
+      if(m %in% c(18)){
         # MVRegTree with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env)))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa)))
@@ -357,9 +394,23 @@ if(pars$data.type[task.id]=="binary"){
         preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),env.eff="quadratic",binary=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),env.eff="quadratic",binary=TRUE))
       }
+      if(m %in% 2 && pars$resp[task.id]=="linear"){
+        # Calculate the R2 for each model
+        preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),transform="hellinger",binary=TRUE))
+        preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),transform="hellinger",binary=TRUE))
+        preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),transform="hellinger",binary=TRUE))
+      }
+      # RDA with quadratic effect of X (env)
+      if(m %in% 2  && pars$resp[task.id]=="gaussian"){
+        mat.sp.log <- log(mat.sp+1)
+        # Calculate the R2 for each model
+        preds.env <- do.call(meths[m],list(mat.sp.log,list(env=mat.env),env.eff="quadratic",transform="hellinger",binary=TRUE))
+        preds.spa <- do.call(meths[m],list(mat.sp.log,list(mem=mat.spa),env.eff="quadratic",transform="hellinger",binary=TRUE))
+        preds.env.spa <- do.call(meths[m],list(mat.sp.log,list(env=mat.env,mem=mat.spa),env.eff="quadratic",transform="hellinger",binary=TRUE))
+      }
       
       # Distance based regression (MRM)
-      if(m %in% c(2)){
+      if(m %in% c(3)){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),binary=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),binary=TRUE))
@@ -368,13 +419,13 @@ if(pars$data.type[task.id]=="binary"){
       
       # GLM
       # R2 is adjusted 
-      if(m %in% 3  && pars$resp[task.id]=="linear"){
+      if(m %in% 4  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="binomial"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),env.eff="linear",family="binomial"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,mem=mat.spa),env.eff="linear",family="binomial"))
       }
-      if(m %in% 3  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 4  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="binomial"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(mem=mat.spa),family="binomial"))
@@ -382,25 +433,25 @@ if(pars$data.type[task.id]=="binary"){
       }
       
       # GAM
-      if(m %in% 4  && pars$resp[task.id]=="linear"){
+      if(m %in% 5  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="binomial"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),env.eff="linear",family="binomial"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),env.eff="linear",family="binomial"))
       }
-      if(m %in% 4  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 5  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="binomial",k.env=3))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),family="binomial",k.env=3))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),family="binomial",k.env=3))
       }
-      if(m %in% 5  && pars$resp[task.id]=="linear"){
+      if(m %in% 6  && pars$resp[task.id]=="linear"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),env.eff="linear",family="binomial",k.spa=10,fx=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),env.eff="linear",family="binomial",k.spa=10,fx=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),env.eff="linear",family="binomial",k.spa=10,fx=TRUE))
       }
-      if(m %in% 5  && pars$resp[task.id]=="gaussian"){
+      if(m %in% 6  && pars$resp[task.id]=="gaussian"){
         # Calculate the R2 for each model
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),family="binomial",k.env=3,k.spa=10,fx=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),family="binomial",k.env=3,k.spa=10,fx=TRUE))
@@ -410,56 +461,56 @@ if(pars$data.type[task.id]=="binary"){
       # Tree-based methods
       # methods using the xy coordinates
       
-      if(m %in% c(6)){
+      if(m %in% c(7)){
         # BRT
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),distr="bernoulli"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),distr="bernoulli"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),distr="bernoulli"))
       }
       
-      if(m %in% c(7)){
+      if(m %in% c(8)){
         # BRT
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),shrink=0.1,distr="bernoulli"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),shrink=0.1,distr="bernoulli"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),shrink=0.1,distr="bernoulli"))
       }
       
-      if(m %in% c(8)){
+      if(m %in% c(9)){
         # BRT
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),inter.depth=1,distr="bernoulli"))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa),inter.depth=1,distr="bernoulli"))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.spa),inter.depth=1,distr="bernoulli"))
       }
       
-      if(m %in% c(9,12,15)){
+      if(m %in% c(10,13,16)){
         # UniRndForest, MVRndForest, MVRegTree with default settings
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),binary=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),binary=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),binary=TRUE))
       }
       
-      if(m %in% c(10,13)){
+      if(m %in% c(11,14)){
         # UniRndForest, MVRndForest
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),sampsize=0.2,binary=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),sampsize=0.2,binary=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),sampsize=0.2,binary=TRUE))
       }
       
-      if(m %in% c(11,14)){
+      if(m %in% c(12,15)){
         # UniRndForest, MVRndForest with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),binary=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa),binary=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.spa),binary=TRUE))
       }
       
-      if(m %in% c(16)){
+      if(m %in% c(17)){
         # MVRegTree
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),CV=TRUE,binary=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.xy),CV=TRUE,binary=TRUE))
         preds.env.spa <- do.call(meths[m],list(mat.sp,list(env=mat.env,xy=mat.xy),CV=TRUE,binary=TRUE))
       }
       
-      if(m %in% c(17)){
+      if(m %in% c(18)){
         # MVRegTree with MEMs
         preds.env <- do.call(meths[m],list(mat.sp,list(env=mat.env),binary=TRUE))
         preds.spa <- do.call(meths[m],list(mat.sp,list(xy=mat.spa),binary=TRUE))
@@ -485,4 +536,5 @@ if(pars$data.type[task.id]=="binary"){
 
 # Save output to a .Rdata file
 save(lout,file=output.file)
+
 
