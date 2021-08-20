@@ -8,9 +8,6 @@
 
 library(vegan)
 library(ltm)
-library(Metrics)
-
-setwd("~/Documents/Papers/iDiv/Paper_process_inference/EVE")
 
 # Load parameters
 load("pars.Rdata")
@@ -19,22 +16,22 @@ load("sim_data.Rdata")
 # Load predictions from the different methods
 load("Model_preds.Rdata")
 
-meths <- c("RDA", "MRM", 
+meths <- c("RDA", "RDA", "MRM", 
            "GLM", "GAM", "GAM",
            "BRT", "BRT", "BRT", "UniRndForest", "UniRndForest", "UniRndForest", 
            "MVRndForest", "MVRndForest", "MVRndForest", "MVRegTree", "MVRegTree", "MVRegTree")
 
-mnam <- c("RDA", "MRM", 
+mnam <- c("RDA-raw", "RDA-Hel", "MRM", 
           "GLM", "GAM-kdef", "GAM-k10",
           "BRT-lr0.01", "BRT-lr0.1", "BRT-MEM", "UniRF-SS0", "UniRF-SS20", "UniRF-MEM",
           "MVRF-SS0", "MVRF-SS20", "MVRF-MEM", "MVRT-noCV", "MVRT-CV", "MVRT-MEM")
 
 meth.family <- character(length(mnam))
-meth.family[1] <- "brown3"
-meth.family[2] <- "deepskyblue3"
-meth.family[3] <- "violet"
-meth.family[4:5] <- "darkseagreen"
-meth.family[6:17] <- "goldenrod1"
+meth.family[1:2] <- "brown3"
+meth.family[3] <- "deepskyblue3"
+meth.family[4] <- "violet"
+meth.family[5:6] <- "darkseagreen"
+meth.family[7:18] <- "goldenrod1"
 names(meth.family) <- mnam
 
 #######################################################################################
@@ -53,7 +50,7 @@ for(i in 1:nrow(pars)){
   Yobs0 <- Yobs0[,sp.in]
   Ytrue0 <- Ytrue0[,sp.in]
   if(pars$data.type[i]=="binary"){
-    sp.in <- which(apply(Yobs0,2,sum)<=(nrow(Ytrue0)-1))
+    sp.in <- which(apply(Yobs0,2,sum)<=(nrow(Ytrue0)-1)) # Exclude species present everywhere
     Yobs0 <- Yobs0[,sp.in]
     Ytrue0 <- Ytrue0[,sp.in]
   }
@@ -75,13 +72,13 @@ for(i in 1:nrow(pars)){
       }
       if(meths[m]=="RDA"){
         if((pars$data.type[i]=="normal"  || pars$data.type[i]=="counts") && pars$resp[i]=="gaussian"){
-          Ytrue <- log(Ytrue0+1)
-          Yobs <- log(Yobs0+1)
+          Ytrue <- as.matrix(scale(log(Ytrue0+1)))
+          Yobs <- as.matrix(scale(log(Yobs0+1)))
         } 
-        Ytrue <- as.matrix(decostand(as.matrix(Ytrue), "hellinger"))
-        Ytrue <- as.matrix(scale(Ytrue,scale=FALSE))
-        Yobs <- as.matrix(decostand(as.matrix(Yobs), "hellinger"))
-        Yobs <- as.matrix(scale(Yobs,scale=FALSE))
+        # Ytrue <- as.matrix(decostand(as.matrix(Ytrue), "hellinger"))
+        # Ytrue <- as.matrix(scale(Ytrue,scale=FALSE))
+        # Yobs <- as.matrix(decostand(as.matrix(Yobs), "hellinger"))
+        # Yobs <- as.matrix(scale(Yobs,scale=FALSE))
       }
       if(meths[m]=="GLM" && pars$data.type[i]=="normal" && pars$resp[i]=="gaussian"){
         Ytrue <- log(Ytrue0+1)
@@ -129,14 +126,7 @@ for(i in 1:nrow(pars)){
   }
 }
 
-res.true[res.true<0] <- 0
-res.obs[res.obs<0] <- 0
-res.sim[res.sim<0] <- 0
-
-res.diff <- array(NA, c(nrow(pars), length(meths), 3))
-res.diff[,,1] <- res.obs[,,1]-res.sim
-res.diff[,,2] <- res.obs[,,2]-res.sim
-res.diff[,,3] <- res.obs[,,3]-res.sim
+# RMSE is not fair because RDA, GLM (normal, log-trasformed), and MRM are on different scales
 
 
 #####################################################################################
@@ -162,7 +152,7 @@ for(i in 1:nrow(pars)){
   Wtrue0 <- sim[[i]]$W
   Wtrue0 <- Wtrue0[,sp.in]
   if(pars$data.type[i]=="binary"){
-    sp.in <- which(apply(Yobs0,2,sum)<=(nrow(Yobs0)-1))
+    sp.in <- which(apply(Yobs0,2,sum)<=(nrow(Yobs0)-1)) # Exclude species present everywhere
     Yobs0 <- Yobs0[,sp.in]
     Ytrue0 <- Ytrue0[,sp.in]
     Xtrue0 <- Xtrue0[,sp.in]
@@ -183,14 +173,23 @@ for(i in 1:nrow(pars)){
     Xtrue <- Xtrue0
     Wtrue <- Wtrue0
     if(!is.null(preds)){
+      #try({
       if(meths[m]=="MRM"){
         if(pars$data.type[i]=="binary"){binary=TRUE} else{binary=FALSE}
         Yobs.tr <- na.exclude(as.matrix(as.numeric(vegdist(Yobs0, method="bray", binary = binary))))
       }
-      if(meths[m]=="RDA"){
+      if(mnam[m]=="RDA-raw"){
         if((pars$data.type[i]=="normal"  || pars$data.type[i]=="counts") && pars$resp[i]=="gaussian"){
-          Yobs <- log(Yobs0+1)
-          Yobs.tr <- as.matrix(decostand(as.matrix(Yobs), "hellinger"))
+          Yobs.tr <- as.matrix(scale(log(Yobs0+1)))
+          # Ytrue <- log(Ytrue0+1)
+          # Xtrue <- log(Xtrue0+1)
+          # Wtrue <- log(Wtrue0+1)
+        } 
+      }
+      if(mnam[m]=="RDA-Hel"){
+        if((pars$data.type[i]=="normal"  || pars$data.type[i]=="counts") && pars$resp[i]=="gaussian"){
+          Yobs.tr <- log(Yobs0+1)
+          Yobs.tr <- as.matrix(decostand(as.matrix(Yobs.tr), "hellinger"))
           Yobs.tr <- as.matrix(scale(Yobs.tr,scale=FALSE))
           # Ytrue <- log(Ytrue0+1)
           # Xtrue <- log(Xtrue0+1)
@@ -201,7 +200,7 @@ for(i in 1:nrow(pars)){
         }
       }
       if(meths[m]=="GLM" && pars$data.type[i]=="normal" && pars$resp[i]=="gaussian"){
-        Yobs <- log(Yobs0+1)
+        Yobs.tr <- log(Yobs0+1)
         # Ytrue <- log(Ytrue0+1)
         # Xtrue <- log(Xtrue0+1)
         # Wtrue <- log(Wtrue0+1)
@@ -211,37 +210,63 @@ for(i in 1:nrow(pars)){
         r2.X.sim <- cor2(Yobs, Xtrue, method="pearson")
         r2.W.sim <- cor2(Yobs, Wtrue, method="pearson")
         r2.XW.sim <- cor2(Yobs, Ytrue, method="pearson")
-        # r2.X.sim <- R2D2(Yobs, Xtrue)[1]
-        # r2.W.sim <- R2D2(Yobs, Wtrue)[1]
-        # r2.XW.sim <- R2D2(Yobs, Ytrue)[1]
+        # r2.X.sim <- R2.classic(Yobs, Xtrue)
+        # r2.W.sim <- R2.classic(Yobs, Wtrue)
+        # r2.XW.sim <- R2.classic(Yobs, Ytrue)
         if(meths[m]=="MRM"){
-          r2.X.est <- R2D2(Yobs.tr, preds[,,1])[1]
-          r2.W.est <- R2D2(Yobs.tr, preds[,,2])[1]
-          r2.XW.est <- R2D2(Yobs.tr, preds[,,3])[1]
+          r2.X.est <- R2.classic(Yobs.tr, preds[,,1])
+          r2.W.est <- R2.classic(Yobs.tr, preds[,,2])
+          r2.XW.est <- R2.classic(Yobs.tr, preds[,,3])
           r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson")
           r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson")
           r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson")
         } 
-        if(meths[m]=="RDA"){
-          r2.X.est <- R2D2(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)[1]
-          r2.W.est <- R2D2(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)[1]
-          r2.XW.est <- R2D2(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)[1]
+        if(mnam[m]=="RDA-raw"){
+          if((pars$data.type[i]=="normal"  || pars$data.type[i]=="counts") && pars$resp[i]=="gaussian"){
+            r2.X.est <- R2.classic(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+            r2.W.est <- R2.classic(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+            r2.XW.est <- R2.classic(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+            r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+            r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+            r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+          } else{
+            r2.X.est <- R2.classic(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs), P=PX)
+            r2.W.est <- R2.classic(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs), P=PW)
+            r2.XW.est <- R2.classic(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+            r2.X.est2 <- cor2(Yobs, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX)
+            r2.W.est2 <- cor2(Yobs, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PW)
+            r2.XW.est2 <- cor2(Yobs, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+          }
+        }
+        if(mnam[m]=="RDA-Hel"){
+          r2.X.est <- R2.classic(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+          r2.W.est <- R2.classic(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+          r2.XW.est <- R2.classic(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
           r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
           r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
           r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
         }
         if(meths[m]=="GLM"){
-          r2.X.est <- R2D2(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)[1]
-          r2.W.est <- R2D2(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)[1]
-          r2.XW.est <- R2D2(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)[1]
-          r2.X.est2 <- cor2(Yobs, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
-          r2.W.est2 <- cor2(Yobs, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
-          r2.XW.est2 <- cor2(Yobs, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+          if(pars$data.type[i]=="normal" && pars$resp[i]=="gaussian"){
+            r2.X.est <- R2.classic(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+            r2.W.est <- R2.classic(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+            r2.XW.est <- R2.classic(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+            r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+            r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+            r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+          } else{
+            r2.X.est <- R2.classic(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs), P=PX)
+            r2.W.est <- R2.classic(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs), P=PW)
+            r2.XW.est <- R2.classic(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+            r2.X.est2 <- cor2(Yobs, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX)
+            r2.W.est2 <- cor2(Yobs, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PW)
+            r2.XW.est2 <- cor2(Yobs, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+          }
         }
         if(meths[m] %in% c("GAM","BRT","UniRndForest","MVRndForest","MVRegTree")){
-          r2.X.est <- R2D2(Yobs, preds[,,1])[1]
-          r2.W.est <- R2D2(Yobs, preds[,,2])[1]
-          r2.XW.est <- R2D2(Yobs, preds[,,3])[1]
+          r2.X.est <- R2.classic(Yobs, preds[,,1])
+          r2.W.est <- R2.classic(Yobs, preds[,,2])
+          r2.XW.est <- R2.classic(Yobs, preds[,,3])
           r2.X.est2 <- cor2(Yobs, preds[,,1], method="pearson")
           r2.W.est2 <- cor2(Yobs, preds[,,2], method="pearson")
           r2.XW.est2 <- cor2(Yobs, preds[,,3], method="pearson")
@@ -253,56 +278,76 @@ for(i in 1:nrow(pars)){
         r2.W.sim <- cor2(Yobs, Wtrue, method="spearman")
         r2.XW.sim <- cor2(Yobs, Ytrue, method="spearman")
         if(meths[m]=="MRM"){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[1]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[1]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[1]
-          r2.X.est <- R2D2(Yobs.tr, preds[,,1])[1]
-          r2.W.est <- R2D2(Yobs.tr, preds[,,2])[1]
-          r2.XW.est <- R2D2(Yobs.tr, preds[,,3])[1]
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          r2.X.est <- R2.classic(Yobs.tr, preds[,,1])
+          r2.W.est <- R2.classic(Yobs.tr, preds[,,2])
+          r2.XW.est <- R2.classic(Yobs.tr, preds[,,3])
           r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="spearman")
           r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="spearman")
           r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="spearman")
         }
-        if(meths[m]=="RDA"){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[1]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[1]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[1]
-          r2.X.est <- R2D2(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)[1]
-          r2.W.est <- R2D2(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)[1]
-          r2.XW.est <- R2D2(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)[1]
+        if(mnam[m]=="RDA-raw"){
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          if((pars$data.type[i]=="normal"  || pars$data.type[i]=="counts") && pars$resp[i]=="gaussian"){
+            r2.X.est <- R2.classic(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+            r2.W.est <- R2.classic(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+            r2.XW.est <- R2.classic(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+            r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+            r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+            r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+          } else{
+            r2.X.est <- R2.classic(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs), P=PX)
+            r2.W.est <- R2.classic(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs), P=PW)
+            r2.XW.est <- R2.classic(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+            r2.X.est2 <- cor2(Yobs, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX)
+            r2.W.est2 <- cor2(Yobs, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PW)
+            r2.XW.est2 <- cor2(Yobs, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+          }
+        }
+        if(mnam[m]=="RDA-Hel"){
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          r2.X.est <- R2.classic(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+          r2.W.est <- R2.classic(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+          r2.XW.est <- R2.classic(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
           r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="spearman", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
           r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="spearman", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
           r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="spearman", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
         }
         if(meths[m]=="GLM"){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[4]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[4]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[4]
-          r2.X.est <- R2D2(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)[4]
-          r2.W.est <- R2D2(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)[4]
-          r2.XW.est <- R2D2(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)[4]
-          r2.X.est2 <- cor2(Yobs, preds[,,1], method="spearman", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
-          r2.W.est2 <- cor2(Yobs, preds[,,2], method="spearman", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
-          r2.XW.est2 <- cor2(Yobs, preds[,,3], method="spearman", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+          # r2.X.sim <- D2.Poisson(Yobs, Xtrue)
+          # r2.W.sim <- D2.Poisson(Yobs, Wtrue)
+          # r2.XW.sim <- D2.Poisson(Yobs, Ytrue)
+          r2.X.est <- D2.Poisson(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs), P=PX)
+          r2.W.est <- D2.Poisson(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs), P=PW)
+          r2.XW.est <- D2.Poisson(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+          r2.X.est2 <- cor2(Yobs, preds[,,1], method="spearman", adjust=TRUE, N=nrow(Yobs), P=PX)
+          r2.W.est2 <- cor2(Yobs, preds[,,2], method="spearman", adjust=TRUE, N=nrow(Yobs), P=PW)
+          r2.XW.est2 <- cor2(Yobs, preds[,,3], method="spearman", adjust=TRUE, N=nrow(Yobs), P=PX+PW)
         }
         if(meths[m] %in% c("UniRndForest","MVRndForest","MVRegTree")){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[1]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[1]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[1]
-          r2.X.est <- R2D2(Yobs, preds[,,1])[1]
-          r2.W.est <- R2D2(Yobs, preds[,,2])[1]
-          r2.XW.est <- R2D2(Yobs, preds[,,3])[1]
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          r2.X.est <- R2.classic(Yobs, preds[,,1])
+          r2.W.est <- R2.classic(Yobs, preds[,,2])
+          r2.XW.est <- R2.classic(Yobs, preds[,,3])
           r2.X.est2 <- cor2(Yobs, preds[,,1], method="spearman")
           r2.W.est2 <- cor2(Yobs, preds[,,2], method="spearman")
           r2.XW.est2 <- cor2(Yobs, preds[,,3], method="spearman")
         } 
         if(meths[m] %in% c("GAM","BRT")){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[4]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[4]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[4]
-          r2.X.est <- R2D2(Yobs, preds[,,1])[4]
-          r2.W.est <- R2D2(Yobs, preds[,,2])[4]
-          r2.XW.est <- R2D2(Yobs, preds[,,3])[4]
+          # r2.X.sim <- D2.Poisson(Yobs, Xtrue)
+          # r2.W.sim <- D2.Poisson(Yobs, Wtrue)
+          # r2.XW.sim <- D2.Poisson(Yobs, Ytrue)
+          r2.X.est <- D2.Poisson(Yobs, preds[,,1])
+          r2.W.est <- D2.Poisson(Yobs, preds[,,2])
+          r2.XW.est <- D2.Poisson(Yobs, preds[,,3])
           r2.X.est2 <- cor2(Yobs, preds[,,1], method="spearman")
           r2.W.est2 <- cor2(Yobs, preds[,,2], method="spearman")
           r2.XW.est2 <- cor2(Yobs, preds[,,3], method="spearman")
@@ -314,45 +359,56 @@ for(i in 1:nrow(pars)){
         r2.W.sim <- cor2(Yobs, Wtrue, method="binary")
         r2.XW.sim <- cor2(Yobs, Ytrue, method="binary")
         if(meths[m]=="MRM"){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[1]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[1]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[1]
-          r2.X.est <- R2D2(Yobs.tr, preds[,,1])[1]
-          r2.W.est <- R2D2(Yobs.tr, preds[,,2])[1]
-          r2.XW.est <- R2D2(Yobs.tr, preds[,,3])[1]
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          r2.X.est <- R2.classic(Yobs.tr, preds[,,1])
+          r2.W.est <- R2.classic(Yobs.tr, preds[,,2])
+          r2.XW.est <- R2.classic(Yobs.tr, preds[,,3])
           r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson")
           r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson")
           r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson")
         }
-        if(meths[m]=="RDA"){
-          # r2.X.sim <- R2D2(Yobs, Xtrue)[1]
-          # r2.W.sim <- R2D2(Yobs, Wtrue)[1]
-          # r2.XW.sim <- R2D2(Yobs, Ytrue)[1]
-          r2.X.est <- R2D2(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)[1]
-          r2.W.est <- R2D2(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)[1]
-          r2.XW.est <- R2D2(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)[1]
+        if(mnam[m]=="RDA-raw"){
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          r2.X.est <- R2.classic(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs), P=PX)
+          r2.W.est <- R2.classic(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs), P=PW)
+          r2.XW.est <- R2.classic(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+          r2.X.est2 <- cor2(Yobs, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX)
+          r2.W.est2 <- cor2(Yobs, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PW)
+          r2.XW.est2 <- cor2(Yobs, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+        }
+        if(mnam[m]=="RDA-Hel"){
+          # r2.X.sim <- R2.classic(Yobs, Xtrue)
+          # r2.W.sim <- R2.classic(Yobs, Wtrue)
+          # r2.XW.sim <- R2.classic(Yobs, Ytrue)
+          r2.X.est <- R2.classic(Yobs.tr, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)
+          r2.W.est <- R2.classic(Yobs.tr, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)
+          r2.XW.est <- R2.classic(Yobs.tr, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
           r2.X.est2 <- cor2(Yobs.tr, preds[,,1], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
           r2.W.est2 <- cor2(Yobs.tr, preds[,,2], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
           r2.XW.est2 <- cor2(Yobs.tr, preds[,,3], method="pearson", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
         }
         if(meths[m]=="GLM"){
-          # r2.X.sim <- R2D2.binom(Yobs, Xtrue)[3]
-          # r2.W.sim <- R2D2.binom(Yobs, Wtrue)[3]
-          # r2.XW.sim <- R2D2.binom(Yobs, Ytrue)[3]
-          r2.X.est <- R2D2.binom(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs.tr), P=PX)[3]
-          r2.W.est <- R2D2.binom(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs.tr), P=PW)[3]
-          r2.XW.est <- R2D2.binom(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)[3]
-          r2.X.est2 <- cor2(Yobs, preds[,,1], method="binary", adjust=TRUE, N=nrow(Yobs.tr), P=PX)
-          r2.W.est2 <- cor2(Yobs, preds[,,2], method="binary", adjust=TRUE, N=nrow(Yobs.tr), P=PW)
-          r2.XW.est2 <- cor2(Yobs, preds[,,3], method="binary", adjust=TRUE, N=nrow(Yobs.tr), P=PX+PW)
+          # r2.X.sim <- R2.Tjur(Yobs, Xtrue)
+          # r2.W.sim <- R2.Tjur(Yobs, Wtrue)
+          # r2.XW.sim <- R2.Tjur(Yobs, Ytrue)
+          r2.X.est <- R2.Tjur(Yobs, preds[,,1], adjust=TRUE, N=nrow(Yobs), P=PX)
+          r2.W.est <- R2.Tjur(Yobs, preds[,,2], adjust=TRUE, N=nrow(Yobs), P=PW)
+          r2.XW.est <- R2.Tjur(Yobs, preds[,,3], adjust=TRUE, N=nrow(Yobs), P=PX+PW)
+          r2.X.est2 <- cor2(Yobs, preds[,,1], method="binary", adjust=TRUE, N=nrow(Yobs), P=PX)
+          r2.W.est2 <- cor2(Yobs, preds[,,2], method="binary", adjust=TRUE, N=nrow(Yobs), P=PW)
+          r2.XW.est2 <- cor2(Yobs, preds[,,3], method="binary", adjust=TRUE, N=nrow(Yobs), P=PX+PW)
         }
         if(meths[m] %in% c("GAM","BRT","UniRndForest","MVRndForest","MVRegTree")){
-          # r2.X.sim <- R2D2.binom(Yobs, Xtrue)[3]
-          # r2.W.sim <- R2D2.binom(Yobs, Wtrue)[3]
-          # r2.XW.sim <- R2D2.binom(Yobs, Ytrue)[3]
-          r2.X.est <- R2D2.binom(Yobs, preds[,,1])[3]
-          r2.W.est <- R2D2.binom(Yobs, preds[,,2])[3]
-          r2.XW.est <- R2D2.binom(Yobs, preds[,,3])[3]
+          # r2.X.sim <- R2.Tjur(Yobs, Xtrue)
+          # r2.W.sim <- R2.Tjur(Yobs, Wtrue)
+          # r2.XW.sim <- R2.Tjur(Yobs, Ytrue)
+          r2.X.est <- R2.Tjur(Yobs, preds[,,1])
+          r2.W.est <- R2.Tjur(Yobs, preds[,,2])
+          r2.XW.est <- R2.Tjur(Yobs, preds[,,3])
           r2.X.est2 <- cor2(Yobs, preds[,,1], method="binary")
           r2.W.est2 <- cor2(Yobs, preds[,,2], method="binary")
           r2.XW.est2 <- cor2(Yobs, preds[,,3], method="binary")
@@ -387,6 +443,7 @@ for(i in 1:nrow(pars)){
       # vp.est2[i,m,1] <- ab.est2
       # vp.est2[i,m,2] <- c.est2
       # vp.est2[i,m,3] <- r2.XW.est2
+      #})
     }
   }
 }
@@ -394,10 +451,6 @@ for(i in 1:nrow(pars)){
 vp.sim[vp.sim<0] <- 0
 vp.est[vp.est<0] <- 0
 vp.est2[vp.est2<0] <- 0
-
-vp.diff <- array(NA, c(nrow(pars), length(meths), 2))
-vp.diff[,,1] <- vp.est2[,,1]-vp.sim[,,1]
-vp.diff[,,2] <- vp.est2[,,2]-vp.sim[,,2]
 
 
 
