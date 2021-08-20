@@ -15,8 +15,8 @@
 args = commandArgs(trailingOnly=TRUE)
 output.file <- args[1]
 
-# try to get SGE_TASK_ID from submit script, otherwise fall back to 1
-task.id = as.integer(Sys.getenv("SGE_TASK_ID", "1"))
+# try to get SLURM_ARRAY_TASK_ID  from submit script, otherwise fall back to 1
+task.id = as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", "1"))
 
 # Load libraries
 library(sp)
@@ -53,7 +53,7 @@ coords2<-as.data.frame(coords)
 # Spatial structure of X
 # E.g. autocorrelated environment
 g.dummy.e <- gstat(formula=z~1, locations=~x+y, dummy=T, beta=1, 
-                   model=vgm(psill=0.025,model="Exp",range=grid.side*0.5), nmax=20)
+                   model=vgm(psill=0.025,model="Exp",range=grid.side*pars$rangeX[task.id]), nmax=20)
 # make 1 simulation based on the stat object
 yy.e <- predict(g.dummy.e, newdata=xy, nsim=1)
 # Transform variable from normal to uniform
@@ -66,7 +66,7 @@ E<-yy.data.e
 
 # Spatial structure of W
 g.dummy.s <- gstat(formula=z~1, locations=~x+y, dummy=T, beta=1, 
-                   model=vgm(psill=0.025,model=pars$spa.mod[task.id],range=grid.side*pars$range[task.id]), nmax=20)
+                   model=vgm(psill=0.025,model=pars$spa.mod[task.id],range=grid.side*pars$rangeW[task.id]), nmax=20)
 # make 1 simulation based on the stat object
 yy.s <- predict(g.dummy.s, newdata=xy, nsim=1)
 # Transform variable from normal to uniform
@@ -165,4 +165,3 @@ lout <- list(mat.sp=Y, mat.sp.true=Y.hat, X=X, W=W, mat.env=E, mat.xy=coords2, m
 
 # Save output to a .Rdata file
 save(lout,file=output.file)
-
