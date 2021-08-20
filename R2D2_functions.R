@@ -15,38 +15,6 @@
 # Y.pred - a matrix or data.frame of PREDICTED species abundances,
 #         where species are columns and sites are rows
 
-################################################################################
-
-# ------------------------------------------------------------------------------
-# Correlation-based R2 metric
-# ------------------------------------------------------------------------------
-
-cor2 <- function(Y.obs, Y.pred, method="pearson", adjust=FALSE, N, P){
-  require(ltm)
-  
-  Y <- as.matrix(Y.obs)
-  pred.mat <- as.matrix(Y.pred)
-  r2s <- numeric(ncol(Y))
-  if(method %in% c("pearson","spearman")){
-    for(i in 1:ncol(Y)){
-      r2s[i] <- cor(pred.mat[,i], Y[,i], method=method)^2
-    }
-  }
-  if(method=="binary"){
-    for(i in 1:ncol(Y)){
-      r2s[i] <- biserial.cor(pred.mat[,i], Y[,i], level=2)^2
-    }
-  }
-  
-  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
-  r2s[r2s < 0] <- 0
-  r2 <- mean(r2s)
-  return(r2)
-}
-
-
-################################################################################
-# Measures for continuous outcomes (e.g. abundance data)
 
 # ------------------------------------------------------------------------------
 # 0. Supporting function: Poisson deviance
@@ -173,39 +141,64 @@ R2D2 <- function(Y.obs, Y.pred, adjust=FALSE, N, P){
 
 # ------------------------------------------------------------------------------
 # MCFADDEN PSEUDO R2 (gives identical result to explained deviance)
-# ------------------------------------------------------------------------------
 
-R2.McFadden <- function(Y.obs, Y.pred)
-{
-  L.base <- sum(dbinom(x=Y.obs, size = 1, prob = sum(Y.obs/length(Y.obs)), log=TRUE))
-  L.full <- sum(dbinom(x=Y.obs, size = 1, prob = Y.pred, log=TRUE))
-  1 - (L.full/L.base)
+R2.McFadden <- function(Y.obs, Y.pred, adjust=FALSE, N, P){
+  Y.obs <- as.matrix(Y.obs)
+  Y.pred <- as.matrix(Y.pred) 
+  r2s <- numeric(ncol(Y.obs))
+  for(i in 1:ncol(Y.obs)){
+    L.base <- sum(dbinom(x=Y.obs[,i], size = 1, prob = sum(Y.obs[,i]/length(Y.obs[,i])), log=TRUE))
+    L.full <- sum(dbinom(x=Y.obs[,i], size = 1, prob = Y.pred[,i], log=TRUE))
+    1 - (L.full/L.base)
+  }
+  
+  # Adjust R2?
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
+  r2 <- mean(r2s)
+  return(r2)
 }
 
 # ------------------------------------------------------------------------------
 # EFFRON PSEUDO R2
 #  - This implementation is taken from  the PseudoR2 function from package DescTools
-# ------------------------------------------------------------------------------
 
-R2.Efron <- function(Y.obs, Y.pred)
-{
-  1 - (sum((Y.obs - Y.pred)^2))/(sum((Y.obs - mean(Y.obs))^2))
+R2.Efron <- function(Y.obs, Y.pred, adjust=FALSE, N, P){
+  Y.obs <- as.matrix(Y.obs)
+  Y.pred <- as.matrix(Y.pred) 
+  r2s <- numeric(ncol(Y.obs))
+  for(i in 1:ncol(Y.obs)){
+    r2s[i] <- 1 - (sum((Y.obs[,i] - Y.pred[,i])^2))/(sum((Y.obs[,i] - mean(Y.obs[,i]))^2))
+  }
+  
+  # Adjust R2?
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
+  r2 <- mean(r2s)
+  return(r2)
 }
 
 # ------------------------------------------------------------------------------
 # TJUR PSEUDO R2
 # This implementation is taken from  the PseudoR2 function from package DescTools
-# ------------------------------------------------------------------------------
 
-R2.Tjur <- function(Y.obs, Y.pred)
-{
-  unname(diff(tapply(Y.pred, Y.obs, 
-                     mean, na.rm = TRUE)))
+R2.Tjur <- function(Y.obs, Y.pred, adjust=FALSE, N, P){
+  Y.obs <- as.matrix(Y.obs)
+  Y.pred <- as.matrix(Y.pred) 
+  r2s <- numeric(ncol(Y.obs))
+  for(i in 1:ncol(Y.obs)){
+    r2s[i] <- unname(diff(tapply(Y.pred[,i], Y.obs[,i], mean, na.rm = TRUE)))
+  }
+  
+  # Adjust R2?
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
+  r2 <- mean(r2s)
+  return(r2)
 }
 
 # ------------------------------------------------------------------------------
 # PROPORTION OF EXPLAINED BERNOULLI DEVIANCE (identical results to McFadden pseudo R2)
-# ------------------------------------------------------------------------------
 
 D2.binom <- function(Y.obs, Y.pred) 
 {
@@ -218,26 +211,55 @@ D2.binom <- function(Y.obs, Y.pred)
 # Function that calculates the functions above for all species and averages them
 # across the species
 
-R2D2.binom <- function(Y.obs, Y.pred, adjust=FALSE, N, P)
-{
-  Y.obs <- as.matrix(Y.obs)
-  Y.pred <- as.matrix(Y.pred) 
-  
-  res <- list()
-  for(i in 1:ncol(Y.obs))
-  {
-    res[[i]] <- c(R2.McFadden = D2.binom(Y.obs[,i], Y.pred[,i]), 
-                  R2.Efron    = R2.Efron(Y.obs[,i], Y.pred[,i]), 
-                  R2.Tjur     = R2.Tjur(Y.obs[,i], Y.pred[,i]))
-  }
-  res <- do.call(rbind, res)
+R2D2.binom <- function(Y.obs, Y.pred, adjust=FALSE, N, P){
+  res <-  c(R2.McFadden = D2.binom(Y.obs, Y.pred, adjust=FALSE, N, P), 
+            R2.Efron = R2.Efron(Y.obs, Y.pred, adjust=FALSE, N, P),
+            R2.Tjur  = R2.Tjur(Y.obs, Y.pred, adjust=FALSE, N, P))
   res[res < 0] <- 0 # change negative values to 0
-  #3res[is.nan(res)] <- 0
-  # Adjust R2?
-  if(adjust) res <- 1-(((N-1)/(N-P-1))*(1-res))
-  res[res < 0] <- 0 # change negative values to 0
-
-  res <- colMeans(res, na.rm = TRUE)
   return(res)
 }
+
+################################################################################
+# Squared correlation for both continuous and binary data
+
+# ------------------------------------------------------------------------------
+# Squared correlation coefficient averaged across species
+
+cor2 <- function(Y.obs, Y.pred, method="pearson", adjust=FALSE, N, P){
+  require(ltm)
+  
+  Y <- as.matrix(Y.obs)
+  pred.mat <- as.matrix(Y.pred)
+  r2s <- numeric(ncol(Y))
+  if(method %in% c("pearson","spearman")){
+    for(i in 1:ncol(Y)){
+      r2s[i] <- cor(pred.mat[,i], Y[,i], method=method)^2
+    }
+  }
+  if(method=="binary"){
+    for(i in 1:ncol(Y)){
+      r2s[i] <- biserial.cor(pred.mat[,i], Y[,i], level=2)^2
+    }
+  }
+  
+  if(adjust) r2s <- 1-(((N-1)/(N-P-1))*(1-r2s))
+  r2s[r2s < 0] <- 0
+  r2 <- mean(r2s)
+  return(r2)
+}
+
+
+
+################################################################################
+
+# Function to perform variation partitioning (two components of variation)
+VarPart <- function(ab,bc,abc){
+  a<-abc-bc
+  b<-ab+bc-abc
+  c<-abc-ab
+  d<-1-abc
+  R2 <- c(a, b, c, d)
+  return(R2)
+}
+
 
