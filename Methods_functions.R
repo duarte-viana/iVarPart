@@ -24,15 +24,14 @@
 # RDA
 # ------------------------------------------------------------------------------
 
-# On Hellinger-transformed data
-RDA <- function(Y, X, binary = FALSE, env.eff = "linear"){
-  require(vegan)
-  require(Matrix)
+RDA <- function(Y, X, binary = FALSE, env.eff = "linear", transform = NULL){
+  #require(vegan)
+  #require(Matrix)
   
-  if(ncol(Y)==1){
+  if(ncol(Y)==1 || is.null(transform)){
     Y.hel <- Y
   } else{
-    Y.hel <- as.matrix(decostand(as.matrix(Y), "hellinger"))
+    if(!is.null(transform)) Y.hel <- as.matrix(decostand(as.matrix(Y), transform))
   }
   
   env <- X$env
@@ -55,50 +54,6 @@ RDA <- function(Y, X, binary = FALSE, env.eff = "linear"){
 
 
 
-# ------------------------------------------------------------------------------
-# dbRDA
-# ------------------------------------------------------------------------------
-
-## On raw abundance data
-dbRDA <- function(Y, X, binary = FALSE){
-  require(vegan)
-  pcoa <- cmdscale(vegdist(Y, method = "bray", binary = binary), 
-                   k=(NROW(Y) - 1), list.=TRUE, eig=TRUE, add=TRUE)
-  Y.pcoa <- pcoa$points
-  
-  X0 <- as.data.frame(do.call("cbind", X))
-  Y.pred <- Y.pcoa; Y.pred[] <- NA
-  for(i in 1:ncol(Y.pcoa)){
-    lmi <- lm(Y.pcoa[,i]~., data=X0)
-    Y.pred[,i] <- predict(lmi)
-  }
-  
-  return(Y.pred)
-}
-
-
-
-##############################################################################
-# Distance-based regression
-##############################################################################
-
-# ------------------------------------------------------------------------------
-# MRM
-# ------------------------------------------------------------------------------
-
-## On raw abundance data
-MRM <- function(Y, X, binary = FALSE){
-  require(vegan)
-  Ydist <- as.numeric(vegdist(Y, method="bray", binary = binary))
-  #Ydist <- as.numeric(dist(Y))
-  if(length(X)==1) mod <- lm(Ydist ~ as.numeric(dist(X[[1]])))
-  if(length(X)==2) mod <- lm(Ydist ~ as.numeric(dist(X$env)) + as.numeric(dist(X$xy)))
-  Y.pred <- predict(mod)
-  return(Y.pred)
-}
-
-
-
 ##############################################################################
 # Generalised linear models
 ##############################################################################
@@ -113,7 +68,7 @@ MRM <- function(Y, X, binary = FALSE){
 # ------------------------------------------------------------------------------
 
 GLM <- function(Y, X, family = "quasipoisson", env.eff = "quadratic"){
-  require(Matrix)
+  #require(Matrix)
   mem <- X$mem
   env <- X$env
   if(!is.null(env)) n.env <- 1:ncol(env)
@@ -153,7 +108,7 @@ GLM <- function(Y, X, family = "quasipoisson", env.eff = "quadratic"){
 
 GAM <- function(Y, X, family = "poisson", env.eff = "splines", k.env = 3, k.spa = -1, fx = FALSE)
 {
-  require(mgcv) 
+  #require(mgcv) 
   
   if(is.list(X)) names(X) <- NULL
   Y <- data.frame(Y)
@@ -261,7 +216,7 @@ GAM <- function(Y, X, family = "poisson", env.eff = "splines", k.env = 3, k.spa 
 
 MVRegTree <- function(Y, X, binary = FALSE, CV = FALSE)
 {
-  require(mvpart)
+  #require(mvpart)
   
   if(binary)  Y[Y > 1] <- 1
   
@@ -358,7 +313,7 @@ UniRndForest <- function(Y, X, binary = FALSE, sampsize="default")
 
 MVRndForest <- function(Y, X, binary = FALSE, CV = FALSE, sampsize = "default")
 {
-  require(randomForestSRC)
+  #require(randomForestSRC)
   Y.orig <- Y
   
   if(binary) {
@@ -435,7 +390,7 @@ MVRndForest <- function(Y, X, binary = FALSE, CV = FALSE, sampsize = "default")
 
 BRT <- function(Y, X, distr = "gaussian", CV = FALSE, inter.depth = 2, shrink = 0.01)
 {
-  require(mvtboost)
+  #require(mvtboost)
   
   X <- data.frame(X)
   
