@@ -1,7 +1,8 @@
 # iVarPart
 
-"Disentangling spatial and environmental effects: flexible methods for community ecology and macroecology"
-Duarte S. Viana, Petr Keil, Alienor Jeliazkov
+Article title: "Disentangling spatial and environmental effects: flexible methods for community ecology and macroecology"
+Journal: Ecosphere
+Authors: Duarte S. Viana, Petr Keil, Alienor Jeliazkov
 
 
 The files contained in this repository provide the R code for simulating and analysing the data corresponding to the mentioned paper. Below we provide a brief description of each file.
